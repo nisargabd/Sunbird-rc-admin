@@ -7,7 +7,7 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "0.0.0.0",
-    port: 8080,
+    port: 5173,
     proxy: {
       '/auth': {
         target: process.env.VITE_API_BASE_URL || 'http://4.240.119.167',
@@ -35,7 +35,7 @@ export default defineConfig(({ mode }) => ({
   },
   preview: {
     host: "0.0.0.0",
-    port: 8080,
+    port: 5173,
     proxy: {
       '/auth': {
         target: process.env.VITE_API_BASE_URL || 'http://4.240.119.167',

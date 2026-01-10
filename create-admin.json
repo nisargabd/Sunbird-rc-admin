@@ -1,0 +1,15 @@
+{
+    "schema_id": "default",
+    "traits": {
+        "email": "admin@example.com",
+        "name": "Admin User",
+        "role": "admin"
+    },
+    "credentials": {
+        "password": {
+            "config": {
+                "password": "admin123"
+            }
+        }
+    }
+}

@@ -25,7 +25,7 @@ export const Sidebar = () => {
       description: t("msg.logged_out"),
       variant: "error",
     });
-    navigate("/login");
+    navigate("/teacher-home");
   };
 
   return (
@@ -42,14 +42,14 @@ export const Sidebar = () => {
           </div>
         </div>
       </div>
-      
+
       <nav className="flex-1 py-4 px-3 overflow-y-auto space-y-2">
         {userRole === "student" ? (
           <>
             <NavLink
               to="/profile"
               className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
-            activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
+              activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
             >
               <User className="h-5 w-5 text-info/80 group-hover:text-info transition-colors" />
               <span>{t("profile.my_profile")}</span>
@@ -68,7 +68,7 @@ export const Sidebar = () => {
             </NavLink>
             <NavLink
               to="/pending-claims"
-             className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
+              className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
               activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
             >
               <Clock className="h-5 w-5 text-warning/80 group-hover:text-warning transition-colors" />
@@ -104,6 +104,6 @@ export const Sidebar = () => {
           <span>{t("nav.logout")}</span>
         </button>
       </div>
-    </aside>
+    </aside >
   );
 };

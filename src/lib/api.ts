@@ -1,4 +1,14 @@
-const BASE_URL = "";
+import { Configuration, FrontendApi } from '@ory/client';
+
+const kratosConfig = new Configuration({
+  basePath: import.meta.env.VITE_ORY_KRATOS_PUBLIC || "http://localhost:4433",
+  baseOptions: {
+    withCredentials: true,
+  },
+});
+const kratos = new FrontendApi(kratosConfig);
+
+const BASE_URL: string = (import.meta.env.VITE_API_BASE_URL as string) || "";
 
 // Token management
 export const setAuthToken = (token: string) => {
@@ -24,32 +34,55 @@ const handleUnauthorized = () => {
 
 // Login API
 export const loginApi = async (username: string, password: string) => {
-  const formData = new URLSearchParams();
-  formData.append("client_id", "registry-frontend");
-  formData.append("username", username);
-  formData.append("password", password);
-  formData.append("grant_type", "password");
+  try {
+    // 1. Initialize the Login Flow (only if no flow exists)
+    const initResponse = await kratos.createBrowserLoginFlow();
+    const flowId = initResponse.data.id;
 
-  const response = await fetch(`${BASE_URL}/auth/realms/sunbird-rc/protocol/openid-connect/token`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: formData,
-  });
+    console.log("Flow ID:", flowId);
+    console.log("UI Nodes:", initResponse.data.ui.nodes);
 
-  if (!response.ok) {
-    throw new Error("Login failed");
+    // Extract CSRF Token
+    const csrfNode = initResponse.data.ui.nodes.find((node: any) =>
+      node.attributes?.name === "csrf_token"
+    );
+    const csrfToken = (csrfNode?.attributes as any)?.value as string;
+
+    console.log("CSRF Token:", csrfToken);
+
+    if (!csrfToken) {
+      throw new Error("CSRF token not found in flow");
+    }
+
+    // 2. Submit the Login Flow
+    const loginResponse = await kratos.updateLoginFlow({
+      flow: flowId,
+      updateLoginFlowBody: {
+        method: "password",
+        identifier: username,
+        password: password,
+        csrf_token: csrfToken,
+      },
+    });
+
+    // 3. Return session (mapping to what the UI expects slightly, or just return data)
+    return {
+      access_token: loginResponse.data.session.id,
+      ...loginResponse.data
+    };
+
+  } catch (error: any) {
+    console.error("Login failed:", error.response?.data || error.message);
+    throw new Error(
+      error.response?.data?.ui?.messages?.[0]?.text || "Login failed"
+    );
   }
-
-  const data = await response.json();
-  return data;
 };
 
 // Search Teacher by email
 export const searchTeacherByEmail = async (email: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher/search`, {
     method: "POST",
     headers: {
@@ -82,7 +115,7 @@ export const searchTeacherByEmail = async (email: string) => {
 // Get Teacher by ID
 export const getTeacherById = async (osid: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher/${osid}`, {
     method: "GET",
     headers: {
@@ -105,7 +138,7 @@ export const getTeacherById = async (osid: string) => {
 // Search Student by email
 export const searchStudentByEmail = async (email: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Student/search`, {
     method: "POST",
     headers: {
@@ -134,7 +167,7 @@ export const searchStudentByEmail = async (email: string) => {
 // Get Student by ID
 export const getStudentById = async (osid: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Student/${osid}`, {
     method: "GET",
     headers: {
@@ -157,7 +190,7 @@ export const getStudentById = async (osid: string) => {
 // Search Admin by email
 export const searchAdminByEmail = async (email: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Admin/search`, {
     method: "POST",
     headers: {
@@ -186,7 +219,7 @@ export const searchAdminByEmail = async (email: string) => {
 // Get Admin by ID
 export const getAdminById = async (osid: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Admin/${osid}`, {
     method: "GET",
     headers: {
@@ -209,7 +242,7 @@ export const getAdminById = async (osid: string) => {
 // Get Teacher Claims
 export const getTeacherClaims = async () => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher/claims`, {
     method: "GET",
     headers: {
@@ -290,7 +323,7 @@ export interface ClaimsResponse {
 // Search all Teachers (Admin)
 export const searchAllTeachers = async () => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher/search`, {
     method: "POST",
     headers: {
@@ -317,7 +350,7 @@ export const searchAllTeachers = async () => {
 // Search all Students (Teacher)
 export const searchAllStudents = async () => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Student/search`, {
     method: "POST",
     headers: {
@@ -348,7 +381,7 @@ export const downloadStudentCertificate = async (
   attestationId: string
 ) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(
     `${BASE_URL}/registry/api/v1/Student/${studentId}/attestation/${attestationName}/${attestationId}`,
     {
@@ -385,7 +418,7 @@ export const addStudent = async (studentData: {
   grade?: string;
 }) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Student`, {
     method: "POST",
     headers: {
@@ -419,7 +452,7 @@ export const updateStudent = async (studentId: string, studentData: {
   grade?: string;
 }) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Student/${studentId}`, {
     method: "PUT",
     headers: {
@@ -451,7 +484,7 @@ export const addTeacher = async (teacherData: {
   gender: string;
 }) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher`, {
     method: "POST",
     headers: {
@@ -483,7 +516,7 @@ export const updateTeacher = async (teacherId: string, teacherData: {
   gender?: string;
 }) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher/${teacherId}`, {
     method: "PUT",
     headers: {
@@ -508,7 +541,7 @@ export const updateTeacher = async (teacherId: string, teacherData: {
 // Attest/Approve Claim (Teacher token)
 export const attestClaim = async (claimId: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/Teacher/claims/${claimId}/attest`, {
     method: "POST",
     headers: {
@@ -534,7 +567,7 @@ export const attestClaim = async (claimId: string) => {
 // Request for Claim (Student token)
 export const requestClaim = async (studentId: string) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/send`, {
     method: "POST",
     headers: {
@@ -563,7 +596,7 @@ export const requestClaim = async (studentId: string) => {
 // Request attestation for specific field changes (when attestable fields are updated)
 export const attestFieldClaim = async (studentId: string, fields: string[]) => {
   const token = getAuthToken();
-  
+
   const response = await fetch(`${BASE_URL}/registry/api/v1/send`, {
     method: "POST",
     headers: {
