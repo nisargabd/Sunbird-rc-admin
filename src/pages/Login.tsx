@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { oryService } from '@/lib/ory';
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -104,8 +104,8 @@ const Login = () => {
           );
 
           if (!acceptResponse.ok) {
-             const errText = await acceptResponse.text();
-             throw new Error('Failed to accept login challenge: ' + errText);
+            const errText = await acceptResponse.text();
+            throw new Error('Failed to accept login challenge: ' + errText);
           }
 
           const acceptData = await acceptResponse.json();
@@ -131,19 +131,25 @@ const Login = () => {
   };
 
   // ... (rest of the component)
+  // Check if we need to redirect to the OAuth2 provider (Hydra)
   const isInitializingFlow = !loginChallenge;
 
-  if (isInitializingFlow) {
-    setTimeout(async () => {
-      const { oauth2Service } = await import('../lib/oauth2');
-      oauth2Service.startAuthFlow();
-    }, 100);
+  useEffect(() => {
+    if (isInitializingFlow) {
+      const timer = setTimeout(async () => {
+        const { oauth2Service } = await import('../lib/oauth2');
+        oauth2Service.startAuthFlow();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isInitializingFlow]);
 
+  if (isInitializingFlow) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-12 w-12 animate-spin text-cyan-500" />
-          <h2 className="text-xl font-semibold">Connecting...</h2>
+          <h2 className="text-xl font-semibold">Connecting to Secure Login...</h2>
         </div>
       </div>
     );
@@ -151,21 +157,21 @@ const Login = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-cyan-900 via-blue-900 to-slate-900">
-      
+
       <div className="grid lg:grid-cols-2 gap-8 w-full max-w-4xl">
-         {/* Info Side */}
-         <div className="hidden lg:flex flex-col justify-center text-white space-y-6 p-6">
-            <div className="space-y-4">
-              <h1 className="text-4xl font-bold tracking-tight">Welcome Back</h1>
-              <p className="text-lg text-cyan-100">
-                Secure Authentication provided by Ory Kratos.
-              </p>
-            </div>
-            
-            <div className="space-y-4 text-sm text-cyan-200/80">
-               <p>Please sign in to continue to <strong>EduTech Portal</strong>.</p>
-            </div>
-         </div>
+        {/* Info Side */}
+        <div className="hidden lg:flex flex-col justify-center text-white space-y-6 p-6">
+          <div className="space-y-4">
+            <h1 className="text-4xl font-bold tracking-tight">Welcome Back</h1>
+            <p className="text-lg text-cyan-100">
+              Secure Authentication provided by Ory Kratos.
+            </p>
+          </div>
+
+          <div className="space-y-4 text-sm text-cyan-200/80">
+            <p>Please sign in to continue to <strong>EduTech Portal</strong>.</p>
+          </div>
+        </div>
 
         {/* Login Card */}
         <Card className="w-full shadow-2xl border-0 bg-white/95 backdrop-blur-sm">

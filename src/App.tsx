@@ -19,7 +19,15 @@ import NotFound from "./pages/NotFound";
 import Callback from "./pages/Callback";
 import Consent from "./pages/Consent";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false, // Prevent re-fetching when window regains focus
+      retry: false,
+      staleTime: 5000,
+    },
+  },
+});
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
@@ -64,4 +72,3 @@ const App = () => {
 };
 
 export default App;
-

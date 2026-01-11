@@ -78,6 +78,13 @@ log:
   format: text
   leak_sensitive_values: true
 
+session:
+  cookie:
+    domain: localhost
+    same_site: Lax
+    path: /
+    persistent: true
+
 secrets:
   cookie:
     - PLEASE-CHANGE-ME-I-AM-VERY-INSECURE

@@ -1,7 +1,10 @@
 import { Configuration, OAuth2Api } from '@ory/client';
 
+// Helper to ensure no trailing slash
+const stripTrailingSlash = (url: string) => url.replace(/\/$/, '');
+
 const hydraConfig = new Configuration({
-  basePath: import.meta.env.VITE_ORY_HYDRA_PUBLIC || "http://localhost:4444",
+  basePath: stripTrailingSlash(import.meta.env.VITE_ORY_HYDRA_PUBLIC || "http://localhost:4444"),
   baseOptions: {
     withCredentials: true,
   },
@@ -25,7 +28,7 @@ export const oauth2Service = {
     sessionStorage.setItem('oauth2_state', state);
 
     // Build authorization URL
-    const authUrl = new URL(`${import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444'}/oauth2/auth`);
+    const authUrl = new URL(`${stripTrailingSlash(import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444')}/oauth2/auth`);
     authUrl.searchParams.append('client_id', clientId);
     authUrl.searchParams.append('redirect_uri', redirectUri);
     authUrl.searchParams.append('response_type', 'code');
@@ -46,16 +49,17 @@ export const oauth2Service = {
 
     console.log('Exchanging code for token...', { code, clientId });
 
-    const response = await fetch(`${import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444'}/oauth2/token`, {
+    const response = await fetch(`${stripTrailingSlash(import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444')}/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
       },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         code: code,
         redirect_uri: redirectUri,
+        client_id: clientId,
+        client_secret: clientSecret,
       }),
     });
 
@@ -75,15 +79,16 @@ export const oauth2Service = {
     const clientId = import.meta.env.VITE_OAUTH2_CLIENT_ID;
     const clientSecret = import.meta.env.VITE_OAUTH2_CLIENT_SECRET;
 
-    const response = await fetch(`${import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444'}/oauth2/token`, {
+    const response = await fetch(`${stripTrailingSlash(import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444')}/oauth2/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
       },
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
       }),
     });
 
