@@ -50,6 +50,56 @@ export default function Callback() {
         // Clean up
         sessionStorage.removeItem('oauth2_state');
 
+        // Decode token to get role for routing
+        try {
+          const tokenParts = tokens.access_token.split('.');
+          if (tokenParts.length === 3) {
+            // Robust base64url decoding
+            const base64Url = tokenParts[1];
+            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
+              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+            }).join(''));
+
+            const payload = JSON.parse(jsonPayload);
+            console.log('🔑 Token Payload:', payload);
+
+            // Try different paths for role and email
+            let role = payload.role || payload.ext?.role || payload.claims?.role || payload['https://sunbird.rc/role'];
+            const email = payload.email || payload.ext?.email || payload.claims?.email || payload.sub;
+
+            // Fallback: If email starts with admin, force admin role for demo
+            if (!role && email && email.toLowerCase().startsWith('admin')) {
+              role = 'admin';
+            }
+
+            role = (role || 'employee').toLowerCase();
+
+            console.log('🎭 Detected Role:', role);
+
+            // Store for later use
+            localStorage.setItem('userRole', role);
+            if (email) localStorage.setItem('userEmail', email);
+
+            // Navigate and show feedback
+            if (role === 'admin' || email?.toLowerCase().startsWith('admin')) {
+              console.log('🚀 Redirecting to Registry');
+              navigate('/registry');
+            } else if (role === 'teacher') {
+              navigate('/registry');
+            } else {
+              console.log('👤 Redirecting to Profile');
+              navigate('/profile');
+            }
+            return;
+          } else {
+            console.warn('⚠️ Access token is not a JWT');
+          }
+        } catch (decodeError) {
+          console.error('❌ Could not decode token for role routing:', decodeError);
+        }
+
+        // Default fallback
         navigate('/registry');
       } catch (err) {
         console.error('Token exchange error:', err);

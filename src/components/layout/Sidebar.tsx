@@ -16,16 +16,29 @@ export const Sidebar = () => {
     setUserRole(role);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn");
-    localStorage.removeItem("userEmail");
-    localStorage.removeItem("userRole");
+  const handleLogout = async () => {
     toast({
-      title: "👋 " + t("nav.logout"),
-      description: t("msg.logged_out"),
-      variant: "error",
+      title: "👋 Logging out...",
+      description: "Please wait while we secure your session.",
     });
-    navigate("/teacher-home");
+
+    console.log("👋 Initiating logout...");
+
+    // Clear all local state immediately
+    localStorage.clear();
+    sessionStorage.clear();
+
+    // Kill the session on the server
+    // Added a small flag to prevent the auto-login loop on the login page
+    localStorage.setItem("justLoggedOut", "true");
+
+    try {
+      // Attempt to logout from Ory Kratos
+      await oryService.logout();
+    } catch (e) {
+      console.error("Logout failed", e);
+      window.location.href = "/login";
+    }
   };
 
   return (
@@ -90,7 +103,7 @@ export const Sidebar = () => {
             activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
           >
             <Database className="h-5 w-5 text-primary/80 group-hover:text-primary transition-colors" />
-            <span>{t("nav.teachers_list")}</span>
+            <span>{t("Employee List")}</span>
           </NavLink>
         )}
       </nav>

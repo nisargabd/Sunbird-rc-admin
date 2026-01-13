@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { searchAllTeachers, searchAllStudents } from "@/lib/api";
+import { searchAllEmployees } from "@/lib/employeeApi";
 
 type SortOrder = "asc" | "desc" | null;
 type SortField = "created" | "updated" | null;
@@ -66,13 +67,67 @@ const Registry = () => {
     const role = localStorage.getItem("userRole") || "admin";
     setUserRole(role);
 
+    console.log('👤 Current User Role:', role);
+
     // Fetch entities based on role
-    if (role === "admin") {
-      fetchTeachers();
+    if (role === "admin" || role === "employee") {
+      fetchEmployees();
     } else if (role === "teacher") {
       fetchStudents();
     }
   }, []);
+
+  const fetchEmployees = async () => {
+    setIsLoading(true);
+    try {
+      console.log('📡 Fetching employees from registry...');
+      const response = await searchAllEmployees();
+
+      console.log('🔍 Raw API Response:', response);
+
+      // Handle the various ways Sunbird RC can return data
+      // Based on provided JSON: { "totalCount": 7, "data": [...] }
+      let employeesArray = [];
+      if (Array.isArray(response)) {
+        employeesArray = response;
+      } else if (response && typeof response === 'object') {
+        // High priority for the 'data' property as per user JSON
+        const listData = response.data || response.Employee || response.result || response.content;
+
+        if (Array.isArray(listData)) {
+          employeesArray = listData;
+        } else if (listData && typeof listData === 'object' && Array.isArray(listData.content)) {
+          employeesArray = listData.content;
+        } else if (response.osid) {
+          employeesArray = [response];
+        }
+      }
+
+      console.log('✅ Extracted employees array:', employeesArray);
+      console.log('✅ Count:', employeesArray.length);
+
+      // Transform API response to EntityData format
+      const employeeData: EntityData[] = employeesArray.map((employee: any) => ({
+        id: employee.osid || employee.id,
+        name: employee.identityDetails?.fullName || employee.name || 'N/A',
+        email: employee.contactDetails?.email || employee.email || 'N/A',
+        instituteName: employee.identityDetails?.employeeNumber ? `Emp #${employee.identityDetails.employeeNumber}` : employee.instituteName || 'N/A',
+        mobile: employee.contactDetails?.mobile || employee.mobile,
+        created: employee.osCreatedAt || employee.createdAt || new Date().toISOString(),
+        updated: employee.osUpdatedAt || employee.updatedAt || new Date().toISOString(),
+      }));
+
+      setEntities(employeeData);
+    } catch (error) {
+      toast({
+        title: t("toast.failed_load_employees") || "Failed to load employees",
+        description: error instanceof Error ? error.message : t("toast.could_not_fetch_employees") || "Could not fetch employees",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchTeachers = async () => {
     setIsLoading(true);
@@ -204,8 +259,8 @@ const Registry = () => {
     }
   };
 
-  const addButtonText = userRole === "admin" ? t("btn.add_teacher") : t("btn.add_student");
-  const pageTitle = userRole === "admin" ? t("title.teacher_management") : t("title.student_management");
+  const addButtonText = userRole === "admin" ? t("btn.add_employee") || "Add Employee" : t("btn.add_student");
+  const pageTitle = userRole === "admin" ? t("List of Employees") || "Employee Management" : t("title.student_management");
 
   return (
     <DashboardLayout>
@@ -223,7 +278,7 @@ const Registry = () => {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder={userRole === "admin" ? t("placeholder.search_teachers") : t("placeholder.search_students")}
+              placeholder={userRole === "admin" ? t("search employees") || "Search employees..." : t("placeholder.search_students")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 bg-card font-medium rounded-lg h-11 border-input"
@@ -235,7 +290,18 @@ const Registry = () => {
           </Button>
         </div>
 
-        {filteredEntities.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 bg-muted/10 rounded-2xl border border-dashed border-border/60">
+            <div className="relative">
+              <div className="h-16 w-16 rounded-full border-t-2 border-r-2 border-primary animate-spin"></div>
+              <div className="absolute inset-0 h-16 w-16 rounded-full border-2 border-primary/10"></div>
+              <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-6 w-6 text-primary animate-pulse" />
+            </div>
+            <p className="mt-4 text-sm font-semibold text-muted-foreground animate-pulse">
+              Syncing with Registry...
+            </p>
+          </div>
+        ) : filteredEntities.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-primary/20 bg-gradient-to-br from-muted/30 via-muted/10 to-transparent overflow-hidden">
             <div className="flex flex-col items-center justify-center py-12 px-6">
               <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 ring-4 ring-primary/5">

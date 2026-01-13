@@ -1,0 +1,34 @@
+serve:
+  public:
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:5173
+  admin:
+    cors:
+      enabled: true
+      allowed_origins:
+        - http://localhost:5173
+
+urls:
+  self:
+    issuer: http://localhost:4444
+  consent: http://localhost:5173/consent
+  login: http://localhost:5173/login
+  logout: http://localhost:5173/logout
+
+secrets:
+  system:
+    - youReallyNeedToChangeThis
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - public
+
+strategies:
+  access_token: jwt
+
+oauth2:
+  expose_internal_errors: true
+  mirror_top_level_claims: true

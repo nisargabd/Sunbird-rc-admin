@@ -16,7 +16,6 @@ const Login = () => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"admin" | "teacher" | "student">("admin");
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [showPassword, setShowPassword] = useState(false);
@@ -65,59 +64,60 @@ const Login = () => {
       setIsLoading(true);
 
       try {
-        if (loginChallenge) {
-          // Initialize Kratos login flow
-          const loginFlow = await oryService.initLoginFlow();
+        // Initialize Kratos login flow
+        const loginFlow = await oryService.initLoginFlow();
 
-          // Extract CSRF token from the flow
-          const csrfNode = loginFlow.ui.nodes.find((node: any) =>
-            node.attributes?.name === "csrf_token"
-          );
-          const csrfToken = (csrfNode?.attributes as any)?.value as string;
+        // Extract CSRF token from the flow
+        const csrfNode = loginFlow.ui.nodes.find((node: any) =>
+          node.attributes?.name === "csrf_token"
+        );
+        const csrfToken = (csrfNode?.attributes as any)?.value as string;
 
-          if (!csrfToken) {
-            throw new Error("CSRF token not found. Please refresh and try again.");
-          }
-
-          // Submit credentials
-          const session = await oryService.submitLogin(loginFlow.id, email, password, csrfToken);
-
-          // Accept Hydra Challenge
-          const acceptResponse = await fetch(
-            `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
-            {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                subject: session.session.identity.id,
-                remember: true,
-                remember_for: 3600,
-                context: {
-                  email: email,
-                  role: role,
-                  name: session.session.identity.traits.name,
-                },
-              }),
-            }
-          );
-
-          if (!acceptResponse.ok) {
-            const errText = await acceptResponse.text();
-            throw new Error('Failed to accept login challenge: ' + errText);
-          }
-
-          const acceptData = await acceptResponse.json();
-
-          // Redirect
-          window.location.href = acceptData.redirect_to;
-
-        } else {
-          // No login_challenge...
-          const { oauth2Service } = await import('../lib/oauth2');
-          oauth2Service.startAuthFlow();
+        if (!csrfToken) {
+          throw new Error("CSRF token not found. Please refresh and try again.");
         }
+
+        // Submit credentials
+        const session = await oryService.submitLogin(loginFlow.id, email, password, csrfToken);
+
+        // Detect role for demo/local setup (consider "admin" or "admin@...")
+        const isEmailAdmin = email.toLowerCase().startsWith('admin');
+        const userRole = isEmailAdmin ? 'admin' : 'employee';
+
+        // Save to localStorage as a fallback for Consent page
+        localStorage.setItem('userRole', userRole);
+        localStorage.setItem('userEmail', email);
+
+        // Accept Hydra Challenge
+        const acceptResponse = await fetch(
+          `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
+          {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              subject: session.session.identity.id,
+              remember: true,
+              remember_for: 3600,
+              context: {
+                email: email,
+                role: userRole,
+                name: session.session.identity.traits.name,
+              },
+            }),
+          }
+        );
+
+        if (!acceptResponse.ok) {
+          const errText = await acceptResponse.text();
+          throw new Error('Failed to accept login challenge: ' + errText);
+        }
+
+        const acceptData = await acceptResponse.json();
+
+        // Redirect
+        window.location.href = acceptData.redirect_to;
       } catch (error: any) {
         console.error('Login error:', error);
         toast({
@@ -130,21 +130,79 @@ const Login = () => {
     }
   };
 
-  // ... (rest of the component)
-  // Check if we need to redirect to the OAuth2 provider (Hydra)
-  const isInitializingFlow = !loginChallenge;
-
+  // Handle the logic when the page has a login_challenge
   useEffect(() => {
-    if (isInitializingFlow) {
-      const timer = setTimeout(async () => {
-        const { oauth2Service } = await import('../lib/oauth2');
-        oauth2Service.startAuthFlow();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isInitializingFlow]);
+    const checkSession = async () => {
+      if (!loginChallenge) {
+        // No challenge means user came directly to /login
+        // We need to redirect to Hydra to get a challenge
+        console.log('🔄 No login challenge, starting OAuth2 flow...');
+        const timer = setTimeout(async () => {
+          const { oauth2Service } = await import('../lib/oauth2');
+          oauth2Service.startAuthFlow();
+        }, 100);
+        return () => clearTimeout(timer);
+      } else {
+        // We have a challenge. Check if we already have a Kratos session
+        console.log('✅ Have login challenge:', loginChallenge);
 
-  if (isInitializingFlow) {
+        // Skip auto-login if we just explicitly logged out
+        const justLoggedOut = localStorage.getItem("justLoggedOut");
+        if (justLoggedOut === "true") {
+          console.log('🛑 Skipping auto-login because user just logged out.');
+          localStorage.removeItem("justLoggedOut");
+          return;
+        }
+
+        try {
+          const session = await oryService.getSession();
+          if (session) {
+            console.log('🛡️ Active session found, auto-accepting Hydra challenge...');
+
+            // Extract info from session traits
+            const email = session.identity.traits.email || session.identity.traits.username || session.identity.id;
+            const isEmailAdmin = email.toLowerCase().startsWith('admin');
+            const userRole = isEmailAdmin ? 'admin' : 'employee';
+
+            // Accept Hydra Challenge automatically
+            const acceptResponse = await fetch(
+              `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  subject: session.identity.id,
+                  remember: true,
+                  remember_for: 3600,
+                  context: {
+                    email: email,
+                    role: userRole,
+                    name: session.identity.traits.name || email,
+                  },
+                }),
+              }
+            );
+
+            if (acceptResponse.ok) {
+              const acceptData = await acceptResponse.json();
+              console.log('🚀 Redirecting to Hydra accept URL');
+              window.location.href = acceptData.redirect_to;
+              return;
+            }
+          }
+        } catch (e) {
+          console.log('ℹ️ No active session or failed to fetch, proceeding to login form');
+        }
+      }
+    };
+
+    checkSession();
+  }, [loginChallenge]);
+
+  // Show loading screen while redirecting to Hydra
+  if (!loginChallenge) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
         <div className="flex flex-col items-center gap-4">

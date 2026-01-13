@@ -14,20 +14,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
-import { 
-  searchTeacherByEmail, 
-  getTeacherById, 
+import {
+  searchTeacherByEmail,
+  getTeacherById,
   searchStudentByEmail,
   getStudentById,
   searchAdminByEmail,
   getAdminById,
   TeacherProfile,
   StudentProfile,
+  EmployeeProfile,
   updateStudent,
   updateTeacher,
   attestFieldClaim,
   downloadStudentCertificate
 } from "@/lib/api";
+import { searchEmployeeByEmail, getEmployeeById } from "@/lib/employeeApi";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -57,7 +59,7 @@ const ViewProfile = () => {
     grade?: string;
     instituteName?: string;
   }>({});
-  
+
   const [formData, setFormData] = useState({
     fullName: "",
     gender: "Male",
@@ -74,11 +76,11 @@ const ViewProfile = () => {
     const userEmail = localStorage.getItem("userEmail");
     const role = localStorage.getItem("userRole") || "admin";
     setUserRole(role);
-    
+
     if (userEmail) {
       const emailUsername = userEmail.split("@")[0];
       setUsername(emailUsername);
-      
+
       // Fetch profile data based on role
       if (role === "teacher") {
         fetchTeacherProfile(userEmail);
@@ -86,6 +88,8 @@ const ViewProfile = () => {
         fetchStudentProfile(userEmail);
       } else if (role === "admin") {
         fetchAdminProfile(userEmail);
+      } else if (role === "employee") {
+        fetchEmployeeProfile(userEmail);
       }
     }
   }, []);
@@ -95,18 +99,18 @@ const ViewProfile = () => {
     try {
       // Step 1: Search for teacher by email
       const searchResults = await searchTeacherByEmail(email);
-      
+
       // Handle search response - could be array or object with data property
       const teachersArray = Array.isArray(searchResults) ? searchResults : (searchResults.data || []);
-      
+
       if (teachersArray && teachersArray.length > 0) {
         const teacherSummary = teachersArray[0];
         const osid = teacherSummary.osid;
         localStorage.setItem("teacherOsid", osid);
-        
+
         // Step 2: Get full teacher details by osid
         const teacherDetails: TeacherProfile = await getTeacherById(osid);
-        
+
         // Step 3: Populate form data
         setFormData({
           fullName: teacherDetails.name || "",
@@ -134,18 +138,18 @@ const ViewProfile = () => {
     setIsLoading(true);
     try {
       const searchResults = await searchStudentByEmail(email);
-      
+
       // Handle search response - could be array or object with data property
       const studentsArray = Array.isArray(searchResults) ? searchResults : (searchResults.data || []);
-      
+
       if (studentsArray && studentsArray.length > 0) {
         const studentSummary = studentsArray[0];
         const osid = studentSummary.osid;
         setStudentId(osid);
         localStorage.setItem("studentOsid", osid);
-        
+
         const studentDetails: StudentProfile = await getStudentById(osid);
-        
+
         const studentFormData = {
           fullName: studentDetails.fullName || "",
           gender: studentDetails.gender || "Male",
@@ -193,7 +197,7 @@ const ViewProfile = () => {
         // Check for pending claims (ATTESTATION_REQUESTED status)
         const pending = attestations.some((attest: any) => attest._osState === "ATTESTATION_REQUESTED");
         setHasPendingClaims(pending);
-        
+
         // Check for published attestations
         const hasPublished = attestations.some((attest: any) => attest._osState === "PUBLISHED");
         setHasPublishedAttestation(hasPublished);
@@ -213,16 +217,16 @@ const ViewProfile = () => {
     setIsLoading(true);
     try {
       const searchResults = await searchAdminByEmail(email);
-      
+
       // Handle search response - could be array or object with data property
       const adminsArray = Array.isArray(searchResults) ? searchResults : (searchResults.data || []);
-      
+
       if (adminsArray && adminsArray.length > 0) {
         const adminSummary = adminsArray[0];
         const osid = adminSummary.osid;
-        
+
         const adminDetails = await getAdminById(osid);
-        
+
         setFormData({
           fullName: adminDetails.name || "",
           gender: adminDetails.gender || "Male",
@@ -245,6 +249,45 @@ const ViewProfile = () => {
     }
   };
 
+  const fetchEmployeeProfile = async (email: string) => {
+    setIsLoading(true);
+    try {
+      const searchResults = await searchEmployeeByEmail(email);
+
+      // Handle search response - Sunbird RC returns data under 'Employee' key
+      const employeesArray = Array.isArray(searchResults)
+        ? searchResults
+        : (searchResults.Employee || searchResults.data || []);
+
+      if (employeesArray && employeesArray.length > 0) {
+        const employeeSummary = employeesArray[0];
+        const osid = employeeSummary.osid;
+        localStorage.setItem("employeeOsid", osid);
+
+        const employeeDetails: EmployeeProfile = await getEmployeeById(osid);
+
+        setFormData({
+          fullName: employeeDetails.identityDetails?.fullName || "",
+          gender: "Male", // Employee schema doesn't have gender
+          mobile: employeeDetails.contactDetails?.mobile || "",
+          email: employeeDetails.contactDetails?.email || "",
+          instituteName: `Employee #${employeeDetails.identityDetails?.employeeNumber || ""}`,
+          dob: employeeDetails.employmentDetails?.admissionDate || "",
+          degree: "", // Not applicable for employees
+          grade: "", // Not applicable for employees
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "❌ Failed to load profile",
+        description: error instanceof Error ? error.message : "Could not fetch employee profile",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Get role display name
   const getRoleDisplay = (role: string) => {
     if (role === "admin") return t("login.admin");
@@ -255,7 +298,7 @@ const ViewProfile = () => {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.dob) newErrors.dob = "Date of Birth is required";
     if (!formData.gender) newErrors.gender = "Gender is required";
     if (!formData.fullName) newErrors.fullName = "Full Name is required";
@@ -269,10 +312,10 @@ const ViewProfile = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (validateForm()) {
       setIsSaving(true);
-      
+
       try {
         if (userRole === "student" && studentId) {
           // Update student profile
@@ -322,7 +365,7 @@ const ViewProfile = () => {
               variant: "success",
             });
           }
-          
+
           // Refresh claims list
           const userEmail = localStorage.getItem("userEmail") || "";
           await fetchStudentProfile(userEmail);
@@ -352,7 +395,7 @@ const ViewProfile = () => {
             variant: "success",
           });
         }
-        
+
         // No navigation - stay on profile page
       } catch (error) {
         toast({
@@ -384,19 +427,19 @@ const ViewProfile = () => {
 
   const handleRaiseClaim = async () => {
     if (!isStudent || !studentId) return;
-    
+
     setIsSaving(true);
     try {
       // Raise attestation for all attestable fields (fullName, degree, grade, instituteName)
       const attestableFields = ["fullName", "degree", "grade", "instituteName"];
       await attestFieldClaim(studentId, attestableFields);
-      
+
       toast({
         title: "✅ Attestation claim raised",
         description: "Your attestation request has been submitted for verification.",
         variant: "default",
       });
-      
+
       // Refresh profile to update claims
       const userEmail = localStorage.getItem("userEmail");
       if (userEmail) {
@@ -419,13 +462,13 @@ const ViewProfile = () => {
     try {
       const attestationName = "studentInstituteAttest";
       const attestationId = claim.attestationId || "";
-      
+
       if (!attestationId || !studentId) {
         throw new Error("Cannot download certificate");
       }
-      
+
       const blob = await downloadStudentCertificate(studentId, attestationName, attestationId);
-      
+
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -435,7 +478,7 @@ const ViewProfile = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast({
         title: "✅ Certificate downloaded",
         description: "Your certificate has been downloaded successfully",
@@ -553,7 +596,7 @@ const ViewProfile = () => {
                         </TooltipProvider>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <Label className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
@@ -711,267 +754,328 @@ const ViewProfile = () => {
                   </Card>
                 )}
               </div>
+            ) : userRole === "employee" && !isEditMode ? (
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <Card className="bg-card shadow-2xl border-2 border-border/60 rounded-3xl overflow-hidden backdrop-blur-sm">
+                  <div className="h-32 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative">
+                    <div className="absolute -bottom-12 left-8 p-1 bg-background rounded-2xl shadow-xl">
+                      <div className="h-24 w-24 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                        <User className="h-12 w-12" />
+                      </div>
+                    </div>
+                  </div>
+                  <CardContent className="pt-16 px-8 pb-8">
+                    <div className="flex justify-between items-start mb-8">
+                      <div>
+                        <h2 className="text-3xl font-black tracking-tight text-foreground">{formData.fullName || "—"}</h2>
+                        <Badge variant="outline" className="mt-2 text-primary border-primary/20 bg-primary/5 px-3 py-1 text-sm font-bold uppercase tracking-widest leading-none">
+                          Employee Registry
+                        </Badge>
+                      </div>
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          variant="default"
+                          onClick={() => window.print()}
+                          className="gap-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-11 px-6 shadow-lg transition-all active:scale-95"
+                        >
+                          <Download className="h-4 w-4" />
+                          Export Data
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                      <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
+                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Identification</Label>
+                        <p className="text-lg font-bold text-foreground text-ellipsis overflow-hidden whitespace-nowrap">{formData.instituteName || "—"}</p>
+                      </div>
+                      <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
+                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Email Address</Label>
+                        <p className="text-lg font-bold text-foreground text-ellipsis overflow-hidden whitespace-nowrap">{formData.email || "—"}</p>
+                      </div>
+                      <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
+                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Contact Number</Label>
+                        <p className="text-lg font-bold text-foreground">{formData.mobile || "—"}</p>
+                      </div>
+                      <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
+                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Registry Joining Date</Label>
+                        <p className="text-lg font-bold text-foreground">
+                          {formData.dob ? format(new Date(formData.dob), "PPP") : "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Alert className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 border-emerald-200/50 rounded-2xl shadow-sm">
+                  <Shield className="h-5 w-5 text-emerald-600" />
+                  <AlertDescription className="text-sm font-semibold ml-2 text-emerald-800 dark:text-emerald-400">
+                    Secure Verification: This profile data is synchronized with the Sunbird RC core registry using your encrypted OAuth2 session.
+                  </AlertDescription>
+                </Alert>
+              </div>
             ) : (
               /* Edit Mode Form - Students & Teachers/Admins */
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <Card className="bg-card shadow-xl border-2 border-border rounded-2xl overflow-hidden">
-              <CardContent className="pt-8 px-8 pb-8 space-y-6">{isStudent && (
-                  <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold text-foreground">Edit Profile</h2>
-                  </div>
-                )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField>
-                  <Label htmlFor="fullName" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    {t("form.full_name")} {!isReadOnly && <span className="text-destructive">*</span>}
-                    {isStudent && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
-                  </Label>
-                  <Input
-                    id="fullName"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.fullName ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                    placeholder={t("form.enter_full_name")}
-                    disabled={isReadOnly}
-                  />
-                  {errors.fullName && <p className="text-sm font-medium text-destructive">{errors.fullName}</p>}
-                </FormField>
-                <FormField>
-                  <Label htmlFor="gender" className="text-sm font-semibold text-foreground">
-                    {t("form.gender")} {!isReadOnly && <span className="text-destructive">*</span>}
-                  </Label>
-                  <Select
-                    value={formData.gender}
-                    onValueChange={(value) => setFormData({ ...formData, gender: value })}
-                    disabled={isReadOnly}
-                  >
-                    <SelectTrigger className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.gender ? "border-destructive ring-2 ring-destructive/20" : ""}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover">
-                      <SelectItem value="Male">{t("form.male")}</SelectItem>
-                      <SelectItem value="Female">{t("form.female")}</SelectItem>
-                      <SelectItem value="Other">{t("form.other")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {errors.gender && <p className="text-sm font-medium text-destructive">{errors.gender}</p>}
-                </FormField>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField>
-                  <Label className="text-sm font-semibold text-foreground">
-                    {t("form.date_of_birth")} {!isReadOnly && <span className="text-destructive">*</span>}
-                  </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        disabled={isReadOnly}
-                        className={cn(
-                          "w-full justify-start text-left font-medium rounded-lg h-11",
-                          isReadOnly && "bg-muted/50 text-foreground cursor-not-allowed",
-                          !formData.dob && "text-muted-foreground",
-                          errors.dob ? "border-destructive ring-2 ring-destructive/20" : ""
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {formData.dob ? format(new Date(formData.dob), "PPP") : t("form.pick_date")}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-popover" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={formData.dob ? new Date(formData.dob) : undefined}
-                        onSelect={(date) => setFormData({ ...formData, dob: date ? format(date, "yyyy-MM-dd") : "" })}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  {errors.dob && <p className="text-sm font-medium text-destructive">{errors.dob}</p>}
-                </FormField>
-                <FormField>
-                  <Label htmlFor="mobile" className="text-sm font-semibold text-foreground">
-                    {t("form.mobile")} {!isReadOnly && <span className="text-destructive">*</span>}
-                  </Label>
-                  <Input
-                    id="mobile"
-                    type="tel"
-                    value={formData.mobile}
-                    onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                    className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.mobile ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                    placeholder={t("form.enter_mobile")}
-                    disabled={isReadOnly}
-                  />
-                  {errors.mobile && <p className="text-sm font-medium text-destructive">{errors.mobile}</p>}
-                </FormField>
-              </div>
-
-              {!isAdmin && (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField>
-                      <Label htmlFor="instituteName" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                        {t("form.institute_name")} <span className="text-destructive">*</span>
-                        {isStudent && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
-                      </Label>
-                      {isStudent ? (
-                        <Input
-                          id="instituteName"
-                          value={formData.instituteName}
-                          onChange={(e) => setFormData({ ...formData, instituteName: e.target.value })}
-                          className={`rounded-lg h-11 font-medium bg-muted/50 text-foreground cursor-not-allowed ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                          placeholder={t("form.enter_institute")}
-                          disabled={true}
-                        />
-                      ) : (
-                        <Select
-                          value={formData.instituteName}
-                          onValueChange={(value) => setFormData({ ...formData, instituteName: value })}
-                          disabled={isReadOnly}
-                        >
-                          <SelectTrigger className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 cursor-not-allowed" : ""} ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}>
-                            <SelectValue placeholder={t("form.select_institute")} />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover">
-                            <SelectItem value="IIT Delhi">IIT Delhi</SelectItem>
-                            <SelectItem value="IIT Bombay">IIT Bombay</SelectItem>
-                            <SelectItem value="NIT Trichy">NIT Trichy</SelectItem>
-                            <SelectItem value="Delhi University">Delhi University</SelectItem>
-                            <SelectItem value="Anna University">Anna University</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                      {errors.instituteName && <p className="text-sm font-medium text-destructive">{errors.instituteName}</p>}
-                    </FormField>
-                    <FormField>
-                      <Label htmlFor="email" className="text-sm font-semibold text-foreground">
-                        {t("form.email")} {!isReadOnly && <span className="text-destructive">*</span>}
-                      </Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.email ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                        placeholder={t("form.enter_email")}
-                        disabled={isReadOnly}
-                      />
-                      {errors.email && <p className="text-sm font-medium text-destructive">{errors.email}</p>}
-                    </FormField>
-                  </div>
-
-                  {/* Degree and Grade fields - only for students */}
-                  {isStudent && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <FormField>
-                        <Label htmlFor="degree" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          {t("form.degree")}
-                          <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>
-                        </Label>
-                        <Select
-                          value={formData.degree}
-                          onValueChange={(value) => setFormData({ ...formData, degree: value })}
-                          disabled={hasPendingClaims || isReadOnly}
-                        >
-                          <SelectTrigger className={`rounded-lg h-11 font-medium ${hasPendingClaims || isReadOnly ? "bg-muted/50 cursor-not-allowed" : ""}`}>
-                            <SelectValue placeholder={t("form.select_degree")} />
-                          </SelectTrigger>
-                          <SelectContent className="bg-popover">
-                            <SelectItem value="B.Tech">B.Tech</SelectItem>
-                            <SelectItem value="M.Tech">M.Tech</SelectItem>
-                            <SelectItem value="B.Sc">B.Sc</SelectItem>
-                            <SelectItem value="M.Sc">M.Sc</SelectItem>
-                            <SelectItem value="MBA">MBA</SelectItem>
-                            <SelectItem value="PhD">PhD</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FormField>
-                      <FormField>
-                        <Label htmlFor="grade" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                          {t("form.grade")}
-                          <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>
-                        </Label>
-                        <Input
-                          id="grade"
-                          value={formData.grade}
-                          onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
-                          className={`rounded-lg h-11 font-medium ${hasPendingClaims || isReadOnly ? "bg-muted/50 cursor-not-allowed" : ""}`}
-                          placeholder={t("form.enter_grade")}
-                          disabled={hasPendingClaims || isReadOnly}
-                        />
-                      </FormField>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <Card className="bg-card shadow-xl border-2 border-border rounded-2xl overflow-hidden">
+                  <CardContent className="pt-8 px-8 pb-8 space-y-6">{isStudent && (
+                    <div className="flex justify-between items-center mb-4">
+                      <h2 className="text-xl font-bold text-foreground">Edit Profile</h2>
                     </div>
                   )}
-                </>
-              )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField>
+                        <Label htmlFor="fullName" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          {t("form.full_name")} {!isReadOnly && <span className="text-destructive">*</span>}
+                          {isStudent && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
+                        </Label>
+                        <Input
+                          id="fullName"
+                          value={formData.fullName}
+                          onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                          className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.fullName ? "border-destructive ring-2 ring-destructive/20" : ""}`}
+                          placeholder={t("form.enter_full_name")}
+                          disabled={isReadOnly}
+                        />
+                        {errors.fullName && <p className="text-sm font-medium text-destructive">{errors.fullName}</p>}
+                      </FormField>
+                      <FormField>
+                        <Label htmlFor="gender" className="text-sm font-semibold text-foreground">
+                          {t("form.gender")} {!isReadOnly && <span className="text-destructive">*</span>}
+                        </Label>
+                        <Select
+                          value={formData.gender}
+                          onValueChange={(value) => setFormData({ ...formData, gender: value })}
+                          disabled={isReadOnly}
+                        >
+                          <SelectTrigger className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.gender ? "border-destructive ring-2 ring-destructive/20" : ""}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-popover">
+                            <SelectItem value="Male">{t("form.male")}</SelectItem>
+                            <SelectItem value="Female">{t("form.female")}</SelectItem>
+                            <SelectItem value="Other">{t("form.other")}</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {errors.gender && <p className="text-sm font-medium text-destructive">{errors.gender}</p>}
+                      </FormField>
+                    </div>
 
-              {isAdmin && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField>
-                    <Label htmlFor="email" className="text-sm font-semibold text-foreground">
-                      Email ID {!isReadOnly && <span className="text-destructive">*</span>}
-                    </Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.email ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                      placeholder="email@example.com"
-                      disabled={isReadOnly}
-                    />
-                    {errors.email && <p className="text-sm font-medium text-destructive">{errors.email}</p>}
-                  </FormField>
-                </div>
-              )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FormField>
+                        <Label className="text-sm font-semibold text-foreground">
+                          {t("form.date_of_birth")} {!isReadOnly && <span className="text-destructive">*</span>}
+                        </Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              disabled={isReadOnly}
+                              className={cn(
+                                "w-full justify-start text-left font-medium rounded-lg h-11",
+                                isReadOnly && "bg-muted/50 text-foreground cursor-not-allowed",
+                                !formData.dob && "text-muted-foreground",
+                                errors.dob ? "border-destructive ring-2 ring-destructive/20" : ""
+                              )}
+                            >
+                              <CalendarIcon className="mr-2 h-4 w-4" />
+                              {formData.dob ? format(new Date(formData.dob), "PPP") : t("form.pick_date")}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0 bg-popover" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={formData.dob ? new Date(formData.dob) : undefined}
+                              onSelect={(date) => setFormData({ ...formData, dob: date ? format(date, "yyyy-MM-dd") : "" })}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        {errors.dob && <p className="text-sm font-medium text-destructive">{errors.dob}</p>}
+                      </FormField>
+                      <FormField>
+                        <Label htmlFor="mobile" className="text-sm font-semibold text-foreground">
+                          {t("form.mobile")} {!isReadOnly && <span className="text-destructive">*</span>}
+                        </Label>
+                        <Input
+                          id="mobile"
+                          type="tel"
+                          value={formData.mobile}
+                          onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                          className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.mobile ? "border-destructive ring-2 ring-destructive/20" : ""}`}
+                          placeholder={t("form.enter_mobile")}
+                          disabled={isReadOnly}
+                        />
+                        {errors.mobile && <p className="text-sm font-medium text-destructive">{errors.mobile}</p>}
+                      </FormField>
+                    </div>
 
-              {/* Save/Cancel Buttons for Students - Inside Card */}
-              {isStudent && !isReadOnly && (!hasPendingClaims) && (
-                <div className="flex justify-end gap-4 pt-4 border-t border-border mt-6">
-                  <Button type="button" variant="outline" onClick={handleCancel} className="rounded-lg px-6" disabled={isSaving}>
-                    {t("btn.cancel")}
-                  </Button>
-                  <Button type="submit" className="rounded-lg px-8 bg-primary hover:bg-primary/90 gap-2" disabled={isSaving}>
-                    {isSaving ? (
+                    {!isAdmin && (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4" />
-                        {t("btn.save_changes")}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <FormField>
+                            <Label htmlFor="instituteName" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                              {t("form.institute_name")} <span className="text-destructive">*</span>
+                              {isStudent && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
+                            </Label>
+                            {isStudent ? (
+                              <Input
+                                id="instituteName"
+                                value={formData.instituteName}
+                                onChange={(e) => setFormData({ ...formData, instituteName: e.target.value })}
+                                className={`rounded-lg h-11 font-medium bg-muted/50 text-foreground cursor-not-allowed ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}
+                                placeholder={t("form.enter_institute")}
+                                disabled={true}
+                              />
+                            ) : (
+                              <Select
+                                value={formData.instituteName}
+                                onValueChange={(value) => setFormData({ ...formData, instituteName: value })}
+                                disabled={isReadOnly}
+                              >
+                                <SelectTrigger className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 cursor-not-allowed" : ""} ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}>
+                                  <SelectValue placeholder={t("form.select_institute")} />
+                                </SelectTrigger>
+                                <SelectContent className="bg-popover">
+                                  <SelectItem value="IIT Delhi">IIT Delhi</SelectItem>
+                                  <SelectItem value="IIT Bombay">IIT Bombay</SelectItem>
+                                  <SelectItem value="NIT Trichy">NIT Trichy</SelectItem>
+                                  <SelectItem value="Delhi University">Delhi University</SelectItem>
+                                  <SelectItem value="Anna University">Anna University</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            )}
+                            {errors.instituteName && <p className="text-sm font-medium text-destructive">{errors.instituteName}</p>}
+                          </FormField>
+                          <FormField>
+                            <Label htmlFor="email" className="text-sm font-semibold text-foreground">
+                              {t("form.email")} {!isReadOnly && <span className="text-destructive">*</span>}
+                            </Label>
+                            <Input
+                              id="email"
+                              type="email"
+                              value={formData.email}
+                              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                              className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.email ? "border-destructive ring-2 ring-destructive/20" : ""}`}
+                              placeholder={t("form.enter_email")}
+                              disabled={isReadOnly}
+                            />
+                            {errors.email && <p className="text-sm font-medium text-destructive">{errors.email}</p>}
+                          </FormField>
+                        </div>
+
+                        {/* Degree and Grade fields - only for students */}
+                        {isStudent && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <FormField>
+                              <Label htmlFor="degree" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                {t("form.degree")}
+                                <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>
+                              </Label>
+                              <Select
+                                value={formData.degree}
+                                onValueChange={(value) => setFormData({ ...formData, degree: value })}
+                                disabled={hasPendingClaims || isReadOnly}
+                              >
+                                <SelectTrigger className={`rounded-lg h-11 font-medium ${hasPendingClaims || isReadOnly ? "bg-muted/50 cursor-not-allowed" : ""}`}>
+                                  <SelectValue placeholder={t("form.select_degree")} />
+                                </SelectTrigger>
+                                <SelectContent className="bg-popover">
+                                  <SelectItem value="B.Tech">B.Tech</SelectItem>
+                                  <SelectItem value="M.Tech">M.Tech</SelectItem>
+                                  <SelectItem value="B.Sc">B.Sc</SelectItem>
+                                  <SelectItem value="M.Sc">M.Sc</SelectItem>
+                                  <SelectItem value="MBA">MBA</SelectItem>
+                                  <SelectItem value="PhD">PhD</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormField>
+                            <FormField>
+                              <Label htmlFor="grade" className="text-sm font-semibold text-foreground flex items-center gap-2">
+                                {t("form.grade")}
+                                <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>
+                              </Label>
+                              <Input
+                                id="grade"
+                                value={formData.grade}
+                                onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
+                                className={`rounded-lg h-11 font-medium ${hasPendingClaims || isReadOnly ? "bg-muted/50 cursor-not-allowed" : ""}`}
+                                placeholder={t("form.enter_grade")}
+                                disabled={hasPendingClaims || isReadOnly}
+                              />
+                            </FormField>
+                          </div>
+                        )}
                       </>
                     )}
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
-          {/* Save/Cancel Buttons for Teachers - Outside Card */}
-          {!isReadOnly && !isStudent && (
-            <div className="flex justify-end gap-4">
-              <Button type="button" variant="outline" onClick={handleCancel} className="rounded-lg px-6" disabled={isSaving}>
-                {t("btn.cancel")}
-              </Button>
-              <Button type="submit" className="rounded-lg px-8 bg-primary hover:bg-primary/90 gap-2" disabled={isSaving}>
-                {isSaving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    {t("btn.save_changes")}
-                  </>
+                    {isAdmin && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <FormField>
+                          <Label htmlFor="email" className="text-sm font-semibold text-foreground">
+                            Email ID {!isReadOnly && <span className="text-destructive">*</span>}
+                          </Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            className={`rounded-lg h-11 font-medium ${isReadOnly ? "bg-muted/50 text-foreground cursor-not-allowed" : ""} ${errors.email ? "border-destructive ring-2 ring-destructive/20" : ""}`}
+                            placeholder="email@example.com"
+                            disabled={isReadOnly}
+                          />
+                          {errors.email && <p className="text-sm font-medium text-destructive">{errors.email}</p>}
+                        </FormField>
+                      </div>
+                    )}
+
+                    {/* Save/Cancel Buttons for Students - Inside Card */}
+                    {isStudent && !isReadOnly && (!hasPendingClaims) && (
+                      <div className="flex justify-end gap-4 pt-4 border-t border-border mt-6">
+                        <Button type="button" variant="outline" onClick={handleCancel} className="rounded-lg px-6" disabled={isSaving}>
+                          {t("btn.cancel")}
+                        </Button>
+                        <Button type="submit" className="rounded-lg px-8 bg-primary hover:bg-primary/90 gap-2" disabled={isSaving}>
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              {t("btn.save_changes")}
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Save/Cancel Buttons for Teachers - Outside Card */}
+                {!isReadOnly && !isStudent && (
+                  <div className="flex justify-end gap-4">
+                    <Button type="button" variant="outline" onClick={handleCancel} className="rounded-lg px-6" disabled={isSaving}>
+                      {t("btn.cancel")}
+                    </Button>
+                    <Button type="submit" className="rounded-lg px-8 bg-primary hover:bg-primary/90 gap-2" disabled={isSaving}>
+                      {isSaving ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          {t("btn.save_changes")}
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 )}
-              </Button>
-            </div>
-          )}
-        </form>
+              </form>
             )}
           </>
         )}

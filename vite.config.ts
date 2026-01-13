@@ -9,25 +9,31 @@ export default defineConfig(({ mode }) => ({
     host: "0.0.0.0",
     port: 5173,
     proxy: {
-      '/auth': {
-        target: process.env.VITE_API_BASE_URL || 'http://4.240.119.167',
+      '/api': {
+        target: 'http://localhost:8081',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path,
         configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
-            console.log('Auth proxy error', err);
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.removeHeader('Origin');
+            proxyReq.removeHeader('Referer');
           });
         },
       },
-      '/registry': {
-        target: process.env.VITE_API_BASE_URL || 'http://4.240.119.167',
+      '/auth': {
+        target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path,
+      },
+      '/registry/api': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/registry/, ''),
         configure: (proxy, options) => {
-          proxy.on('error', (err, req, res) => {
-            console.log('Registry proxy error', err);
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            proxyReq.removeHeader('Origin');
+            proxyReq.removeHeader('Referer');
           });
         },
       },
@@ -43,7 +49,7 @@ export default defineConfig(({ mode }) => ({
         secure: false,
         rewrite: (path) => path,
       },
-      '/registry': {
+      '/registry/api': {
         target: process.env.VITE_API_BASE_URL || 'http://4.240.119.167',
         changeOrigin: true,
         secure: false,

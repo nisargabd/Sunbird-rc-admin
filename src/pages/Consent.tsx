@@ -10,6 +10,50 @@ export default function Consent() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // const handleAccept = async () => {
+    //     if (!consentChallenge) {
+    //         setError('No consent challenge found');
+    //         return;
+    //     }
+
+    //     setIsLoading(true);
+
+    //     try {
+    //         const acceptResponse = await fetch(
+    //             `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/consent/accept?consent_challenge=${consentChallenge}`,
+    //             {
+    //                 method: 'PUT',
+    //                 headers: {
+    //                     'Content-Type': 'application/json',
+    //                 },
+    //                 body: JSON.stringify({
+    //                     grant_scope: ['openid', 'offline', 'email', 'profile'],
+    //                     grant_access_token_audience: [],
+    //                     remember: true,
+    //                     remember_for: 3600,
+    //                 }),
+    //             }
+    //         );
+
+    //         if (!acceptResponse.ok) {
+    //             throw new Error('Failed to accept consent');
+    //         }
+
+    //         const acceptData = await acceptResponse.json();
+
+    //         // Redirect to callback with authorization code
+    //         window.location.href = acceptData.redirect_to;
+    //     } catch (err: any) {
+    //         console.error('Consent error:', err);
+    //         setError(err.message || 'Failed to process consent');
+    //     } finally {
+    //         setIsLoading(false);
+    //     }
+    // };
+
+    // Auto-accept consent
+
+
     const handleAccept = async () => {
         if (!consentChallenge) {
             setError('No consent challenge found');
@@ -19,6 +63,30 @@ export default function Consent() {
         setIsLoading(true);
 
         try {
+            // First, get the consent request to extract user info
+            const consentRequest = await fetch(
+                `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/consent?consent_challenge=${consentChallenge}`,
+                {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                }
+            );
+
+            if (!consentRequest.ok) {
+                throw new Error('Failed to get consent request');
+            }
+
+            const consentData = await consentRequest.json();
+
+            // Extract user info from Hydra Context (passed from Login page)
+            const userEmail = consentData.context?.email || localStorage.getItem('userEmail') || consentData.subject;
+            const userRole = consentData.context?.role || localStorage.getItem('userRole') || 'employee';
+
+            console.log('📦 Injecting claims into JWT:', { email: userEmail, role: userRole });
+
+            // Accept consent with session claims mapped to top-level
             const acceptResponse = await fetch(
                 `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/consent/accept?consent_challenge=${consentChallenge}`,
                 {
@@ -31,6 +99,18 @@ export default function Consent() {
                         grant_access_token_audience: [],
                         remember: true,
                         remember_for: 3600,
+                        session: {
+                            access_token: {
+                                // These will be at the TOP LEVEL of the JWT, not nested
+                                email: userEmail,
+                                role: userRole,
+                            },
+                            id_token: {
+                                email: userEmail,
+                                role: userRole,
+                                name: consentData.context?.name || userEmail.split('@')[0]
+                            }
+                        }
                     }),
                 }
             );
@@ -50,13 +130,11 @@ export default function Consent() {
             setIsLoading(false);
         }
     };
-
-    // Auto-accept consent REMOVED - User wants to visualize the Handshake
-    // useEffect(() => {
-    //     if (consentChallenge) {
-    //         handleAccept();
-    //     }
-    // }, [consentChallenge]);
+    useEffect(() => {
+        if (consentChallenge) {
+            handleAccept();
+        }
+    }, [consentChallenge]);
 
     if (error) {
         return (

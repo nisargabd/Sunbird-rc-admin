@@ -295,6 +295,35 @@ export interface StudentProfile {
   studentInstituteAttest?: any[];
 }
 
+export interface EmployeeProfile {
+  osid: string;
+  osOwner: string[];
+  osCreatedAt: string;
+  osUpdatedAt: string;
+  osCreatedBy: string;
+  osUpdatedBy: string;
+  identityDetails: {
+    fullName: string;
+    employeeNumber: string;
+    personId?: number;
+  };
+  contactDetails: {
+    email: string;
+    mobile: string;
+  };
+  employmentDetails: {
+    employeeId?: number;
+    companyId?: number;
+    departmentId?: number;
+    positionId?: number;
+    employeeTypeId?: number;
+    admissionDate?: string;
+    contractExpiration?: string;
+    salary?: number;
+    status?: boolean;
+  };
+}
+
 export interface Claim {
   id: string;
   entity: string;

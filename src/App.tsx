@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import Login from "./pages/Login";
-import TeacherHome from "./pages/TeacherHome";
 import Registry from "./pages/Registry";
 import ViewEntity from "./pages/ViewEntity";
 import EditEntity from "./pages/EditEntity";
@@ -37,7 +36,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const App = () => {
   const RootRedirect = () => {
     const isLoggedIn = localStorage.getItem("isLoggedIn") === "true";
-    return <Navigate to={isLoggedIn ? "/registry" : "/teacher-home"} replace />;
+    return <Navigate to={isLoggedIn ? "/registry" : "/login"} replace />;
   };
 
   return (
@@ -49,7 +48,6 @@ const App = () => {
           <BrowserRouter>
             <Routes>
               <Route path="/" element={<RootRedirect />} />
-              <Route path="/teacher-home" element={<TeacherHome />} />
               <Route path="/login" element={<Login />} />
               <Route path="/documentation" element={<DocumentationFull />} />
               <Route path="/registry" element={<ProtectedRoute><Registry /></ProtectedRoute>} />
