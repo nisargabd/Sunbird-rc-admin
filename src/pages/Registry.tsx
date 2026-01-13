@@ -4,7 +4,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Eye, Pencil, Plus, Search, SearchX, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Database } from "lucide-react";
+import { Eye, Pencil, Plus, Search, SearchX, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Database, Mail, Phone } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,8 +29,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { searchAllTeachers, searchAllStudents } from "@/lib/api";
-import { searchAllEmployees } from "@/lib/employeeApi";
+import { searchAllTeachers, searchAllStudents, getStudentById } from "@/lib/api";
+import { searchAllEmployees, getEmployeeById } from "@/lib/employeeApi";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Label } from "@/components/ui/label";
+import { Sidebar } from "@/components/layout/Sidebar";
 
 type SortOrder = "asc" | "desc" | null;
 type SortField = "created" | "updated" | null;
@@ -62,6 +71,53 @@ const Registry = () => {
   const [sortField, setSortField] = useState<SortField>("created");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const recordsPerPage = 10;
+
+  // View Sheet State
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<any>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+
+  const handleView = async (entity: EntityData) => {
+    setIsViewOpen(true);
+    setViewLoading(true);
+    try {
+      console.log("Fetching details for:", entity.id, "Role:", userRole);
+      let details;
+
+      // Dynamically fetch based on what we are listing
+      if (userRole === "admin" || userRole === "employee") {
+        // We are listing Employees
+        details = await getEmployeeById(entity.id);
+      } else if (userRole === "teacher") {
+        // We are listing Students
+        details = await getStudentById(entity.id);
+      } else {
+        // Fallback
+        details = await getEmployeeById(entity.id);
+      }
+
+      console.log("Fetched details:", details);
+
+      // Handle nested structure if present
+      let cleanDetails = details;
+      if (details.Employee) cleanDetails = details.Employee;
+      else if (details.Student) cleanDetails = details.Student; // Student wrapper
+      else if (details.result?.Employee) cleanDetails = details.result.Employee;
+      else if (details.result?.Student) cleanDetails = details.result.Student;
+
+      setSelectedEntity(cleanDetails);
+    } catch (error) {
+      console.error("Error fetching details:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load details",
+        variant: "destructive"
+      });
+    } finally {
+      setViewLoading(false);
+    }
+  };
+
 
   useEffect(() => {
     const role = localStorage.getItem("userRole") || "admin";
@@ -432,7 +488,7 @@ const Registry = () => {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                onClick={() => navigate(`/entity/${entity.id}`)}
+                                onClick={() => handleView(entity)}
                                 className="bg-secondary hover:bg-muted text-foreground hover:text-foreground transition-colors"
                               >
                                 <Eye className="h-4 w-4" />
@@ -547,6 +603,86 @@ const Registry = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <Sheet open={isViewOpen} onOpenChange={setIsViewOpen}>
+        <SheetContent className="overflow-y-auto sm:max-w-md w-full">
+          <SheetHeader>
+            <SheetTitle>Employee Details</SheetTitle>
+            <SheetDescription>
+              Detailed profile view
+            </SheetDescription>
+          </SheetHeader>
+
+          {viewLoading ? (
+            <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div></div>
+          ) : selectedEntity ? (
+            <div className="mt-6 space-y-6">
+
+              {/* Identity Header */}
+              <div className="bg-muted/40 p-4 rounded-lg border border-border">
+                <h3 className="font-bold text-lg mb-1">{selectedEntity.identityDetails?.fullName || "N/A"}</h3>
+                <Badge variant="outline">{selectedEntity.systemDetails?.role || "Employee"}</Badge>
+              </div>
+
+              {/* Details Grid */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Employee ID</Label>
+                    <p className="font-medium">{selectedEntity.identityDetails?.employeeNumber || "N/A"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Status</Label>
+                    <div className="mt-1">
+                      {selectedEntity.employmentDetails?.status ? (
+                        <Badge className="bg-green-600">Active</Badge>
+                      ) : (
+                        <Badge variant="destructive">Inactive</Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Email Address</Label>
+                  <p className="font-medium flex items-center gap-2">
+                    <Mail className="h-4 w-4 text-muted-foreground" />
+                    {selectedEntity.contactDetails?.email || "N/A"}
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wide">Mobile Number</Label>
+                  <p className="font-medium flex items-center gap-2">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    {selectedEntity.contactDetails?.mobile || "N/A"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Joining Date</Label>
+                    <p className="font-medium">
+                      {selectedEntity.employmentDetails?.admissionDate ?
+                        new Date(selectedEntity.employmentDetails.admissionDate).toLocaleDateString() : "N/A"}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground uppercase tracking-wide">Contract Ends</Label>
+                    <p className="font-medium">
+                      {selectedEntity.employmentDetails?.contractExpiration ?
+                        new Date(selectedEntity.employmentDetails.contractExpiration).toLocaleDateString() : "N/A"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">No details available</div>
+          )}
+        </SheetContent>
+      </Sheet>
+
     </DashboardLayout>
   );
 };

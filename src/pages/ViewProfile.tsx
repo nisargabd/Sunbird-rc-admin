@@ -252,32 +252,63 @@ const ViewProfile = () => {
   const fetchEmployeeProfile = async (email: string) => {
     setIsLoading(true);
     try {
+      console.log("🔍 Searching for employee with email:", email);
       const searchResults = await searchEmployeeByEmail(email);
+      console.log("📄 Search Results:", searchResults);
 
-      // Handle search response - Sunbird RC returns data under 'Employee' key
+      // Handle search response - Sunbird RC returns data under 'Employee' key or 'data' or directly
       const employeesArray = Array.isArray(searchResults)
         ? searchResults
-        : (searchResults.Employee || searchResults.data || []);
+        : (searchResults.data || searchResults.Employee || searchResults.result?.Employee || []);
 
       if (employeesArray && employeesArray.length > 0) {
         const employeeSummary = employeesArray[0];
-        const osid = employeeSummary.osid;
+        const osid = employeeSummary.osid || employeeSummary.id; // Fallback for ID
+        console.log("🆔 Found Employee OSID:", osid);
+
         localStorage.setItem("employeeOsid", osid);
 
-        const employeeDetails: EmployeeProfile = await getEmployeeById(osid);
+        const response = await getEmployeeById(osid);
+        console.log("👤 Raw Employee Details Response:", response);
+
+        // Robust extraction: Handle if it's nested under Employee, result.Employee, or direct
+        // based on common Sunbird RC patterns
+        let employeeDetails: any = response;
+
+        // Level 1: Check if response is array
+        if (Array.isArray(employeeDetails)) {
+          employeeDetails = employeeDetails.length > 0 ? employeeDetails[0] : {};
+        }
+
+        // Level 2: Check for wrapper keys
+        if (employeeDetails.Employee) {
+          employeeDetails = employeeDetails.Employee;
+        } else if (employeeDetails.result?.Employee) {
+          employeeDetails = employeeDetails.result.Employee;
+        }
+
+        // Level 3: Check if wrapped content is array
+        if (Array.isArray(employeeDetails)) {
+          employeeDetails = employeeDetails.length > 0 ? employeeDetails[0] : {};
+        }
+
+        console.log("✅ Extracted Employee Details:", employeeDetails);
 
         setFormData({
           fullName: employeeDetails.identityDetails?.fullName || "",
-          gender: "Male", // Employee schema doesn't have gender
+          gender: "Male", // Gender is not in the schema for Employee
           mobile: employeeDetails.contactDetails?.mobile || "",
           email: employeeDetails.contactDetails?.email || "",
-          instituteName: `Employee #${employeeDetails.identityDetails?.employeeNumber || ""}`,
-          dob: employeeDetails.employmentDetails?.admissionDate || "",
-          degree: "", // Not applicable for employees
-          grade: "", // Not applicable for employees
+          instituteName: employeeDetails.identityDetails?.employeeNumber ? `${employeeDetails.identityDetails.employeeNumber}` : "",
+          dob: employeeDetails.employmentDetails?.admissionDate ? format(new Date(employeeDetails.employmentDetails.admissionDate), "yyyy-MM-dd") : "",
+          degree: "",
+          grade: "",
         });
+      } else {
+        console.warn("⚠️ No employee found for email:", email);
       }
     } catch (error) {
+      console.error("❌ Error fetching profile:", error);
       toast({
         title: "❌ Failed to load profile",
         description: error instanceof Error ? error.message : "Could not fetch employee profile",
