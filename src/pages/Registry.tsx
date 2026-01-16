@@ -163,15 +163,32 @@ const Registry = () => {
       console.log('✅ Count:', employeesArray.length);
 
       // Transform API response to EntityData format
-      const employeeData: EntityData[] = employeesArray.map((employee: any) => ({
-        id: employee.osid || employee.id,
-        name: employee.identityDetails?.fullName || employee.name || 'N/A',
-        email: employee.contactDetails?.email || employee.email || 'N/A',
-        instituteName: employee.identityDetails?.employeeNumber ? `Emp #${employee.identityDetails.employeeNumber}` : employee.instituteName || 'N/A',
-        mobile: employee.contactDetails?.mobile || employee.mobile,
-        created: employee.osCreatedAt || employee.createdAt || new Date().toISOString(),
-        updated: employee.osUpdatedAt || employee.updatedAt || new Date().toISOString(),
-      }));
+      // Handle both schemas: nested (identityDetails/contactDetails) and flat (firstName/email)
+      const employeeData: EntityData[] = employeesArray.map((employee: any) => {
+        // Nested schema fields
+        const nestedName = employee.identityDetails?.fullName;
+        const nestedEmail = employee.contactDetails?.email;
+        const nestedMobile = employee.contactDetails?.mobile;
+        const nestedEmpNum = employee.identityDetails?.employeeNumber;
+
+        // Flat schema fields
+        const flatName = employee.firstName && employee.lastName
+          ? `${employee.firstName} ${employee.lastName}`.trim()
+          : employee.name;
+        const flatEmail = employee.email;
+        const flatMobile = employee.phoneNumber || employee.mobile;
+        const flatEmpNum = employee.employeeNumber;
+
+        return {
+          id: employee.osid || employee.id,
+          name: nestedName || flatName || 'N/A',
+          email: nestedEmail || flatEmail || 'N/A',
+          instituteName: (nestedEmpNum || flatEmpNum) ? `Emp #${nestedEmpNum || flatEmpNum}` : employee.instituteName || 'N/A',
+          mobile: nestedMobile || flatMobile,
+          created: employee.osCreatedAt || employee.createdAt || new Date().toISOString(),
+          updated: employee.osUpdatedAt || employee.updatedAt || new Date().toISOString(),
+        };
+      });
 
       setEntities(employeeData);
     } catch (error) {
@@ -315,7 +332,7 @@ const Registry = () => {
     }
   };
 
-  const addButtonText = userRole === "admin" ? t("btn.add_employee") || "Add Employee" : t("btn.add_student");
+  const addButtonText = userRole === "admin" ? t("Add Employee") || "Add Employee" : t("btn.add_student");
   const pageTitle = userRole === "admin" ? t("List of Employees") || "Employee Management" : t("title.student_management");
 
   return (

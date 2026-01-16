@@ -60,6 +60,7 @@ const App = () => {
               <Route path="/approved-claims" element={<ProtectedRoute><ApprovedClaims /></ProtectedRoute>} />
               <Route path="/callback" element={<Callback />} />
               <Route path="/consent" element={<Consent />} />
+              <Route path="/error" element={<Navigate to="/login" replace />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

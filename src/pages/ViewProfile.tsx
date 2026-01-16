@@ -29,7 +29,7 @@ import {
   attestFieldClaim,
   downloadStudentCertificate
 } from "@/lib/api";
-import { searchEmployeeByEmail, getEmployeeById } from "@/lib/employeeApi";
+import { searchEmployeeByEmail, getEmployeeById, searchAllEmployees } from "@/lib/employeeApi";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -253,26 +253,67 @@ const ViewProfile = () => {
     setIsLoading(true);
     try {
       console.log("🔍 Searching for employee with email:", email);
-      const searchResults = await searchEmployeeByEmail(email);
-      console.log("📄 Search Results:", searchResults);
 
-      // Handle search response - Sunbird RC returns data under 'Employee' key or 'data' or directly
-      const employeesArray = Array.isArray(searchResults)
-        ? searchResults
-        : (searchResults.data || searchResults.Employee || searchResults.result?.Employee || []);
+      let osid = "";
+      let employeeSummary: any = null;
 
-      if (employeesArray && employeesArray.length > 0) {
-        const employeeSummary = employeesArray[0];
-        const osid = employeeSummary.osid || employeeSummary.id; // Fallback for ID
+      // Method 1: Search by specific email
+      try {
+        const searchResults = await searchEmployeeByEmail(email);
+        console.log("📄 Search Results (Specific):", searchResults);
+
+        const employeesArray = Array.isArray(searchResults)
+          ? searchResults
+          : (searchResults.data || searchResults.Employee || searchResults.result?.Employee || []);
+
+        if (employeesArray && employeesArray.length > 0) {
+          employeeSummary = employeesArray[0];
+          osid = employeeSummary.osid || employeeSummary.id;
+        }
+      } catch (err) {
+        console.warn("⚠️ Specific email search failed, trying fallback...", err);
+      }
+
+      // Method 2: Fallback to Search All and match (if Method 1 failed)
+      if (!osid) {
+        console.log("🔄 Trying fallback: Search all employees...");
+        try {
+          const allEmployees = await searchAllEmployees();
+          let allArray = [];
+
+          if (Array.isArray(allEmployees)) {
+            allArray = allEmployees;
+          } else {
+            const listData = allEmployees.data || allEmployees.Employee || allEmployees.result || allEmployees.content;
+            if (Array.isArray(listData)) allArray = listData;
+            else if (listData?.content && Array.isArray(listData.content)) allArray = listData.content;
+          }
+
+          // Case-insensitive fuzzy match
+          const found = allArray.find((emp: any) => {
+            const empEmail = emp.contactDetails?.email || emp.email || "";
+            return empEmail.toLowerCase().includes(email.toLowerCase()) || email.toLowerCase().includes(empEmail.toLowerCase());
+          });
+
+          if (found) {
+            console.log("✅ Found employee via fallback search:", found);
+            employeeSummary = found;
+            osid = found.osid || found.id;
+          }
+        } catch (err) {
+          console.error("❌ Fallback search failed:", err);
+        }
+      }
+
+      if (osid) {
         console.log("🆔 Found Employee OSID:", osid);
-
         localStorage.setItem("employeeOsid", osid);
 
+        // Fetch full details using the efficient ID endpoint
         const response = await getEmployeeById(osid);
         console.log("👤 Raw Employee Details Response:", response);
 
         // Robust extraction: Handle if it's nested under Employee, result.Employee, or direct
-        // based on common Sunbird RC patterns
         let employeeDetails: any = response;
 
         // Level 1: Check if response is array
@@ -280,7 +321,7 @@ const ViewProfile = () => {
           employeeDetails = employeeDetails.length > 0 ? employeeDetails[0] : {};
         }
 
-        // Level 2: Check for wrapper keys
+        // Level 2: Check for wrapper keys (common in Sunbird RC)
         if (employeeDetails.Employee) {
           employeeDetails = employeeDetails.Employee;
         } else if (employeeDetails.result?.Employee) {
@@ -295,17 +336,22 @@ const ViewProfile = () => {
         console.log("✅ Extracted Employee Details:", employeeDetails);
 
         setFormData({
-          fullName: employeeDetails.identityDetails?.fullName || "",
-          gender: "Male", // Gender is not in the schema for Employee
-          mobile: employeeDetails.contactDetails?.mobile || "",
-          email: employeeDetails.contactDetails?.email || "",
-          instituteName: employeeDetails.identityDetails?.employeeNumber ? `${employeeDetails.identityDetails.employeeNumber}` : "",
+          fullName: employeeDetails.identityDetails?.fullName || employeeDetails.name || "",
+          gender: "Male", // Gender is not always in the schema for Employee
+          mobile: employeeDetails.contactDetails?.mobile || employeeDetails.mobile || "",
+          email: employeeDetails.contactDetails?.email || employeeDetails.email || "",
+          instituteName: employeeDetails.identityDetails?.employeeNumber ? `${employeeDetails.identityDetails.employeeNumber}` : employeeDetails.instituteName || "",
           dob: employeeDetails.employmentDetails?.admissionDate ? format(new Date(employeeDetails.employmentDetails.admissionDate), "yyyy-MM-dd") : "",
           degree: "",
           grade: "",
         });
       } else {
         console.warn("⚠️ No employee found for email:", email);
+        toast({
+          title: "Profile Not Found",
+          description: `Could not find an employee profile linked to ${email}.`,
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("❌ Error fetching profile:", error);
@@ -818,7 +864,7 @@ const ViewProfile = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                       <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
-                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Identification</Label>
+                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Employee ID</Label>
                         <p className="text-lg font-bold text-foreground text-ellipsis overflow-hidden whitespace-nowrap">{formData.instituteName || "—"}</p>
                       </div>
                       <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
@@ -830,7 +876,7 @@ const ViewProfile = () => {
                         <p className="text-lg font-bold text-foreground">{formData.mobile || "—"}</p>
                       </div>
                       <div className="space-y-2 p-4 rounded-2xl bg-muted/30 border border-border/40">
-                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Registry Joining Date</Label>
+                        <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-[0.2em]">Date of Joining</Label>
                         <p className="text-lg font-bold text-foreground">
                           {formData.dob ? format(new Date(formData.dob), "PPP") : "—"}
                         </p>
@@ -839,12 +885,12 @@ const ViewProfile = () => {
                   </CardContent>
                 </Card>
 
-                <Alert className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 border-emerald-200/50 rounded-2xl shadow-sm">
+                {/* <Alert className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20 border-emerald-200/50 rounded-2xl shadow-sm">
                   <Shield className="h-5 w-5 text-emerald-600" />
                   <AlertDescription className="text-sm font-semibold ml-2 text-emerald-800 dark:text-emerald-400">
                     Secure Verification: This profile data is synchronized with the Sunbird RC core registry using your encrypted OAuth2 session.
                   </AlertDescription>
-                </Alert>
+                </Alert> */}
               </div>
             ) : (
               /* Edit Mode Form - Students & Teachers/Admins */

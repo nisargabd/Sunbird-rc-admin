@@ -1,9 +1,15 @@
 serve:
+  cookies:
+    same_site_mode: Lax
   public:
     cors:
       enabled: true
       allowed_origins:
         - http://localhost:5173
+    # TLS termination is handled by the ingress controller or load balancer, or not used in local dev
+    # tls:
+    #   key: 
+    #   cert: 
   admin:
     cors:
       enabled: true
@@ -13,18 +19,15 @@ serve:
 urls:
   self:
     issuer: http://localhost:4444
-  consent: http://localhost:5173/consent
   login: http://localhost:5173/login
+  consent: http://localhost:5173/consent
   logout: http://localhost:5173/logout
 
 secrets:
   system:
     - youReallyNeedToChangeThis
 
-oidc:
-  subject_identifiers:
-    supported_types:
-      - public
+dsn: postgres://hydra:secret@db:5432/hydra?sslmode=disable
 
 strategies:
   access_token: jwt
@@ -32,3 +35,8 @@ strategies:
 oauth2:
   expose_internal_errors: true
   mirror_top_level_claims: true
+
+oidc:
+  subject_identifiers:
+    supported_types:
+      - public

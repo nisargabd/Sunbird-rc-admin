@@ -16,60 +16,90 @@ const handleUnauthorized = () => {
 
 // Search all Employees (Admin)
 export const searchAllEmployees = async () => {
+    console.log("🔄 Executing Robust Search All Employees...");
     const token = getAuthToken();
 
-    const response = await fetch(`${BASE_URL}/registry/api/v1/Employee/search`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-            filters: {},
-        }),
-    });
+    // Helper to perform search
+    const performSearch = async (payload: any) => {
+        const response = await fetch(`${BASE_URL}/registry/api/v1/Employee/search`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        });
 
-    if (!response.ok) {
-        if (response.status === 401) {
-            handleUnauthorized();
+        if (!response.ok) {
+            if (response.status === 401) handleUnauthorized();
+            throw new Error(`Search failed with status: ${response.status}`);
         }
-        throw new Error("Failed to search employees");
-    }
+        return await response.json();
+    };
 
-    const data = await response.json();
-    return data;
+    try {
+        console.log("Attempting search with standard filters...");
+        // Attempt 1: Standard with limit (Best Practice)
+        return await performSearch({
+            filters: {},
+            limit: 1000,
+            offset: 0
+        });
+    } catch (error) {
+        console.warn("Standard search failed, trying fallback (empty filters)...");
+        try {
+            // Attempt 2: Minimal payload
+            return await performSearch({ filters: {} });
+        } catch (e) {
+            console.warn("Empty filters failed, trying specific 'status' filter...");
+            try {
+                // Attempt 3: Filter by status (common field)
+                return await performSearch({ filters: { "employmentDetails.status": { eq: true } } });
+            } catch (e2) {
+                console.warn("Status filter failed, trying 'osid' existence...");
+                // Attempt 4: Osid exists
+                return await performSearch({ filters: { "osid": { neq: "null" } } });
+            }
+        }
+    }
 };
 
 // Search Employee by email
 export const searchEmployeeByEmail = async (email: string) => {
     const token = getAuthToken();
 
-    const response = await fetch(`${BASE_URL}/registry/api/v1/Employee/search`, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-            filters: {
-                "contactDetails.email": {
-                    eq: email,
-                },
+    // Helper to perform search
+    const performSearch = async (filterObj: any) => {
+        const response = await fetch(`${BASE_URL}/registry/api/v1/Employee/search`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "Authorization": `Bearer ${token}`,
             },
-        }),
-    });
+            body: JSON.stringify({ filters: filterObj }),
+        });
 
-    if (!response.ok) {
-        if (response.status === 401) {
-            handleUnauthorized();
+        if (!response.ok) {
+            if (response.status === 401) handleUnauthorized();
+            throw new Error(`Search failed with status: ${response.status}`);
         }
-        throw new Error("Failed to search employee");
-    }
+        return await response.json();
+    };
 
-    const data = await response.json();
-    return data;
+    try {
+        // Try Schema A: contactDetails.email (Standard)
+        return await performSearch({
+            "contactDetails.email": { eq: email }
+        });
+    } catch (error) {
+        console.warn("Retrying search with flat 'email' schema...");
+        // Try Schema B: email (Flat)
+        return await performSearch({
+            "email": { eq: email }
+        });
+    }
 };
 
 // Get Employee by ID

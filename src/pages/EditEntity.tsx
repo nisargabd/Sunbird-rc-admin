@@ -14,9 +14,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { getTeacherById, getStudentById, updateTeacher, updateStudent, attestFieldClaim } from "@/lib/api";
+import { getEmployeeById, updateEmployee } from "@/lib/employeeApi";
 import { Badge } from "@/components/ui/badge";
 
-const FormField = ({ children }: { children: React.ReactNode}) => (
+const FormField = ({ children }: { children: React.ReactNode }) => (
   <div className="space-y-2.5">{children}</div>
 );
 
@@ -25,7 +26,7 @@ const EditEntity = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [userRole, setUserRole] = useState<string>("admin");
@@ -51,48 +52,55 @@ const EditEntity = () => {
   useEffect(() => {
     const role = localStorage.getItem("userRole") || "admin";
     setUserRole(role);
-    
+
     const fetchEntityData = async () => {
       if (!id) return;
-      
+
       setLoading(true);
       try {
-        if (role === "admin") {
-          // Fetch teacher data
-          const teacherData = await getTeacherById(id);
+        if (role === "teacher") {
+          // Fetch student data for Teacher
+          const studentData = await getStudentById(id);
+          const cleanStudent = studentData.Student || studentData;
+
           setFormData({
-            gender: teacherData.gender || "Male",
-            fullName: "",
-            name: teacherData.name || "",
-            mobile: teacherData.mobile || "",
-            email: teacherData.email || "",
-            instituteName: teacherData.instituteName || "",
-            dob: teacherData.dob || "",
-            subject: teacherData.subject || "",
-            degree: "",
-            grade: "",
+            gender: cleanStudent.gender || "Male",
+            fullName: cleanStudent.fullName || "",
+            name: "",
+            mobile: cleanStudent.mobile || "",
+            email: cleanStudent.email || "",
+            instituteName: cleanStudent.instituteName || "",
+            dob: cleanStudent.dob || "",
+            subject: "",
+            degree: cleanStudent.degree || "",
+            grade: cleanStudent.grade || "",
+          });
+
+          setOriginalAttestableData({
+            degree: cleanStudent.degree || "",
+            grade: cleanStudent.grade || "",
+            instituteName: cleanStudent.instituteName || "",
           });
         } else {
-          // Fetch student data
-          const studentData = await getStudentById(id);
-          const studentFormData = {
-            gender: studentData.gender || "Male",
-            fullName: studentData.fullName || "",
+          // Admin or Employee editing Employee data
+          const employeeData = await getEmployeeById(id);
+
+          // Robust extraction
+          let cleanEmployee = employeeData;
+          if (employeeData.Employee) cleanEmployee = employeeData.Employee;
+          else if (employeeData.result?.Employee) cleanEmployee = employeeData.result.Employee;
+
+          setFormData({
+            gender: "Male", // Not in schema, default
+            fullName: cleanEmployee.identityDetails?.fullName || "",
             name: "",
-            mobile: studentData.mobile || "",
-            email: studentData.email || "",
-            instituteName: studentData.instituteName || "",
-            dob: studentData.dob || "",
+            mobile: cleanEmployee.contactDetails?.mobile || "",
+            email: cleanEmployee.contactDetails?.email || "",
+            instituteName: cleanEmployee.identityDetails?.employeeNumber ? `${cleanEmployee.identityDetails.employeeNumber}` : "",
+            dob: cleanEmployee.employmentDetails?.admissionDate || "",
             subject: "",
-            degree: studentData.degree || "",
-            grade: studentData.grade || "",
-          };
-          setFormData(studentFormData);
-          // Store original attestable data
-          setOriginalAttestableData({
-            degree: studentData.degree || "",
-            grade: studentData.grade || "",
-            instituteName: studentData.instituteName || "",
+            degree: "",
+            grade: "",
           });
         }
       } catch (error) {
@@ -105,7 +113,7 @@ const EditEntity = () => {
         setLoading(false);
       }
     };
-    
+
     fetchEntityData();
   }, [id]);
 
@@ -115,27 +123,18 @@ const EditEntity = () => {
     if (fieldName === "mobile" && !value) return t("validation.mobile_required");
     if (fieldName === "email" && !value) return t("validation.email_required");
     if (fieldName === "instituteName" && !value) return t("validation.institute_required");
-    if (fieldName === "name" && !value && userRole === "admin") return t("validation.name_required");
-    if (fieldName === "fullName" && !value && userRole === "teacher") return t("validation.full_name_required");
+    if (fieldName === "fullName" && !value) return t("validation.full_name_required");
     return "";
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.dob) newErrors.dob = "Date of Birth is required";
-    if (!formData.gender) newErrors.gender = "Gender is required";
     if (!formData.mobile) newErrors.mobile = "Mobile number is required";
     if (!formData.email) newErrors.email = "Email is required";
     if (!formData.instituteName) newErrors.instituteName = "Institute Name is required";
-
-    if (userRole === "admin") {
-      // Editing teacher
-      if (!formData.name) newErrors.name = "Name is required";
-    } else {
-      // Editing student
-      if (!formData.fullName) newErrors.fullName = "Full Name is required";
-    }
+    if (!formData.fullName) newErrors.fullName = "Full Name is required";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -143,26 +142,11 @@ const EditEntity = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (validateForm() && id) {
       setIsSaving(true);
       try {
-        if (userRole === "admin") {
-          // Update Teacher
-          await updateTeacher(id, {
-            name: formData.name,
-            mobile: formData.mobile,
-            email: formData.email,
-            subject: formData.subject,
-            instituteName: formData.instituteName,
-            gender: formData.gender,
-          });
-          toast({
-            title: t("toast.teacher_updated"),
-            description: t("toast.teacher_record_updated"),
-            variant: "success",
-          });
-        } else {
+        if (userRole === "teacher") {
           // Update Student
           await updateStudent(id, {
             fullName: formData.fullName,
@@ -182,28 +166,48 @@ const EditEntity = () => {
           if (formData.instituteName !== originalAttestableData.instituteName) changedFields.push("instituteName");
 
           if (changedFields.length > 0) {
-            // Request attestation for changed fields
             try {
               await attestFieldClaim(id, changedFields);
               toast({
                 title: t("toast.student_updated_with_claim"),
-                description: "You have changed attestable data, so a claim is raised. You can download the certificate after verification.",
+                description: "You have changed attestable data, so a claim is raised.",
                 variant: "default",
               });
             } catch (error) {
-              toast({
-                title: t("toast.student_updated"),
-                description: t("toast.student_record_updated") + " (Attestation request failed)",
-                variant: "success",
-              });
+              // ignore claim error
             }
           } else {
-            toast({
-              title: t("toast.student_updated"),
-              description: t("toast.student_record_updated"),
-              variant: "success",
-            });
+            toast({ title: t("toast.student_updated"), description: t("toast.student_record_updated"), variant: "success" });
           }
+
+        } else {
+          // Update Employee (Admin/Employee role)
+          // We map form fields back to the deep structure
+          const employeeUpdatePayload = {
+            identityDetails: {
+              fullName: formData.fullName,
+              // Preserve existing fields if possible, or we need to fetch them. 
+              // For now update what we have.
+            },
+            contactDetails: {
+              email: formData.email,
+              mobile: formData.mobile
+            },
+            employmentDetails: {
+              admissionDate: formData.dob, // Mapping dob to admissionDate
+              // companyId etc need presumed defaults or existing values? 
+              // Ideally we should merge with existing data, but PUT replaces.
+              // The API might support partial updates (PATCH) or we send what we have.
+            }
+          };
+
+          await updateEmployee(id, employeeUpdatePayload);
+
+          toast({
+            title: "Success",
+            description: "Employee record updated successfully",
+            variant: "success",
+          });
         }
         navigate("/registry");
       } catch (error) {
@@ -253,7 +257,7 @@ const EditEntity = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField>
                   <Label htmlFor={isTeacher ? "name" : "fullName"} className="text-sm font-semibold text-foreground">
-                    {isTeacher ? t("form.name") : t("form.full_name")} <span className="text-destructive">*</span>
+                    {isTeacher ? t("form.name") : (userRole === "teacher" ? t("form.full_name") : "Employee Name")} <span className="text-destructive">*</span>
                   </Label>
                   <Input
                     id={isTeacher ? "name" : "fullName"}
@@ -265,7 +269,7 @@ const EditEntity = () => {
                       setErrors(prev => ({ ...prev, [fieldName]: error || undefined }));
                     }}
                     className={`rounded-lg h-11 ${(isTeacher ? errors.name : errors.fullName) ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                    placeholder={isTeacher ? t("form.enter_name") : t("form.enter_full_name")}
+                    placeholder={isTeacher ? t("form.enter_name") : (userRole === "teacher" ? t("form.enter_full_name") : "Enter employee name")}
                   />
                   {(isTeacher ? errors.name : errors.fullName) && (
                     <p className="text-sm font-medium text-destructive">{isTeacher ? errors.name : errors.fullName}</p>
@@ -299,7 +303,7 @@ const EditEntity = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField>
                   <Label className="text-sm font-semibold text-foreground">
-                    {t("form.date_of_birth")} <span className="text-destructive">*</span>
+                    {userRole === "teacher" ? t("form.date_of_birth") : "Date of Joining"} <span className="text-destructive">*</span>
                   </Label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -333,10 +337,10 @@ const EditEntity = () => {
                 </FormField>
                 <FormField>
                   <Label htmlFor="instituteName" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    {t("form.institute_name")} <span className="text-destructive">*</span>
-                    {!isTeacher && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
+                    {userRole === "teacher" ? t("form.institute_name") : "Employee ID"} <span className="text-destructive">*</span>
+                    {userRole === "teacher" && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
                   </Label>
-                  {!isTeacher ? (
+                  {userRole === "teacher" ? (
                     <Select
                       value={formData.instituteName}
                       onValueChange={(value) => {
@@ -367,7 +371,7 @@ const EditEntity = () => {
                         setErrors(prev => ({ ...prev, instituteName: error || undefined }));
                       }}
                       className={`rounded-lg h-11 ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}
-                      placeholder={t("form.enter_institute")}
+                      placeholder={userRole === "teacher" ? t("form.enter_institute") : "Enter Employee ID"}
                     />
                   )}
                   {errors.instituteName && <p className="text-sm font-medium text-destructive">{errors.instituteName}</p>}

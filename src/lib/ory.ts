@@ -43,13 +43,13 @@ export const oryService = {
   },
 
   // Logout
-  async logout() {
+  async logout(returnToUrl?: string) {
     try {
       // Create logout flow
       const { data } = await kratos.createBrowserLogoutFlow();
 
-      // We want to redirect back to login after Kratos clears the session
-      const returnTo = window.location.origin + "/login";
+      // Redirect to the provided URL or default to login
+      const returnTo = returnToUrl || (window.location.origin + "/login");
       const logoutUrl = new URL(data.logout_url);
       logoutUrl.searchParams.append("return_to", returnTo);
 
@@ -57,7 +57,12 @@ export const oryService = {
       window.location.href = logoutUrl.toString();
     } catch (error) {
       console.error("Failed to create logout flow:", error);
-      window.location.href = "/login";
+      // If flow creation fails, try fallback redirection
+      if (returnToUrl) {
+        window.location.href = returnToUrl;
+      } else {
+        window.location.href = "/login";
+      }
     }
   },
 };

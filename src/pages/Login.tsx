@@ -221,13 +221,13 @@ const Login = () => {
         <div className="hidden lg:flex flex-col justify-center text-white space-y-6 p-6">
           <div className="space-y-4">
             <h1 className="text-4xl font-bold tracking-tight">Welcome Back</h1>
-            <p className="text-lg text-cyan-100">
+            {/* <p className="text-lg text-cyan-100">
               Secure Authentication provided by Ory Kratos.
-            </p>
+            </p> */}
           </div>
 
           <div className="space-y-4 text-sm text-cyan-200/80">
-            <p>Please sign in to continue to <strong>EduTech Portal</strong>.</p>
+            <p>Please sign in to continue</p>
           </div>
         </div>
 

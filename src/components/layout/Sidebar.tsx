@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { oryService } from "@/lib/ory";
 
 export const Sidebar = () => {
   const navigate = useNavigate();
@@ -19,24 +20,41 @@ export const Sidebar = () => {
   const handleLogout = async () => {
     toast({
       title: "👋 Logging out...",
-      description: "Please wait while we secure your session.",
+      description: "Securing your session...",
     });
 
-    console.log("👋 Initiating logout...");
+    console.log("👋 Initiating chained logout...");
+
+    // 1. Get tokens for Hydra hint
+    const idToken = sessionStorage.getItem("id_token");
 
     // Clear all local state immediately
     localStorage.clear();
     sessionStorage.clear();
 
-    // Kill the session on the server
-    // Added a small flag to prevent the auto-login loop on the login page
+    // Prevent auto-login loop
     localStorage.setItem("justLoggedOut", "true");
 
     try {
-      // Attempt to logout from Ory Kratos
-      await oryService.logout();
+      // 2. Construct Hydra Logout URL
+      // Logic: Kratos Logout -> Redirect to Hydra Logout -> Redirect to Login Page
+      const hydraPublicUrl = import.meta.env.VITE_ORY_HYDRA_PUBLIC || "http://localhost:4444";
+      const postLogoutRedirectUri = window.location.origin + "/login";
+
+      const hydraLogoutUrl = new URL(`${hydraPublicUrl}/oauth2/sessions/logout`);
+      if (idToken) {
+        hydraLogoutUrl.searchParams.append("id_token_hint", idToken);
+      }
+      hydraLogoutUrl.searchParams.append("post_logout_redirect_uri", postLogoutRedirectUri);
+
+      console.log("🔗 Chain Target: ", hydraLogoutUrl.toString());
+
+      // 3. Trigger Kratos Logout with return_to = Hydra Logout URL
+      // import { oryService } from '@/lib/ory'; // Ensure imported if not already
+      await oryService.logout(hydraLogoutUrl.toString());
+
     } catch (e) {
-      console.error("Logout failed", e);
+      console.error("Logout chain failed", e);
       window.location.href = "/login";
     }
   };
