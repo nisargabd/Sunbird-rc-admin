@@ -114,7 +114,7 @@ export const Sidebar = () => {
               <span>{t("nav.approved_claims")}</span>
             </NavLink>
           </>
-        ) : (
+        ) : userRole === "admin" ? (
           <NavLink
             to="/registry"
             className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
@@ -123,6 +123,11 @@ export const Sidebar = () => {
             <Database className="h-5 w-5 text-primary/80 group-hover:text-primary transition-colors" />
             <span>{t("Employee List")}</span>
           </NavLink>
+        ) : (
+          // Standard Employee View (No List Access)
+          <div className="px-4 py-2 text-sm text-muted-foreground italic text-center border border-dashed rounded-lg bg-muted/20">
+            {t("Welcome, Employee")}
+          </div>
         )}
       </nav>
 

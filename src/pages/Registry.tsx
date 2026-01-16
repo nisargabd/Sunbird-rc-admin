@@ -126,7 +126,7 @@ const Registry = () => {
     console.log('👤 Current User Role:', role);
 
     // Fetch entities based on role
-    if (role === "admin" || role === "employee") {
+    if (role === "admin") {
       fetchEmployees();
     } else if (role === "teacher") {
       fetchStudents();

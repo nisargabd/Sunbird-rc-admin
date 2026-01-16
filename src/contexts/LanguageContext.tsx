@@ -21,15 +21,15 @@ const translations = {
     'nav.approved_claims': 'Approved Claims',
     'nav.logout': 'Logout',
     'nav.certificates': 'Certificates',
-    
+
     // Page titles
     'title.claim_requests': 'Claim Requests',
     'title.pending_claims': 'Pending Claims',
     'title.approved_claims': 'Approved Claims',
-    'title.student_management': 'Student Management',
+    'title.student_management': 'Employee Management',
     'title.teacher_management': 'Teacher Management',
     'title.registry': 'Registry',
-    
+
     // Buttons
     'btn.request_claim': 'Request For Claim',
     'btn.approve': 'Approve',
@@ -46,18 +46,18 @@ const translations = {
     'btn.close': 'Close',
     'btn.back': 'Back',
     'btn.add_teacher': 'Add Teacher',
-    'btn.add_student': 'Add Student',
+    'btn.add_student': 'Add Employee',
     'btn.save_changes': 'Save Changes',
     'btn.confirm_request': 'Confirm Request',
     'btn.back_to_registry': 'Back to Registry',
-    
+
     // Status
     'status.approved': 'Approved',
     'status.pending': 'Pending',
     'status.rejected': 'Rejected',
     'status.open': 'Open',
     'status.closed': 'Closed',
-    
+
     // Table headers
     'table.student_name': 'Student Name',
     'table.institute_name': 'Institute Name',
@@ -74,14 +74,14 @@ const translations = {
     'table.claim_id': 'Claim ID',
     'table.status': 'Status',
     'table.actions': 'Actions',
-    
+
     // Messages
     'msg.no_claims': 'No claims found. Click "Request For Claim" to submit a new request.',
     'msg.no_entities': 'No entities found.',
     'msg.logged_out': 'You have been successfully logged out.',
     'msg.approving': 'Approving...',
     'msg.rejecting': 'Rejecting...',
-    
+
     // Login
     'login.title': 'Welcome Back',
     'login.subtitle': 'Enter your credentials to access your account',
@@ -93,29 +93,29 @@ const translations = {
     'login.admin': 'Admin',
     'login.teacher': 'Teacher',
     'login.student': 'Student',
-    
+
     // Profile
     'profile.view_profile': 'View Profile',
     'profile.my_profile': 'My Profile',
     'profile.username': 'Username',
     'profile.email': 'Email Address',
     'profile.role': 'Role',
-    
+
     // Languages
     'lang.english': 'English',
     'lang.spanish': 'Spanish',
-    
+
     // Search
     'search.teachers': 'Search for teachers...',
-    'search.students': 'Search for students...',
+    'search.students': 'Search for employeess...',
     'search.claims': 'Search for claims...',
     'search.default': 'Search...',
-    
+
     // Forms
     'form.name': 'Name',
     'form.full_name': 'Full Name',
     'form.gender': 'Gender',
-    'form.date_of_birth': 'Date of Birth',
+    'form.date_of_birth': 'Date of Joining',
     'form.subject': 'Subject',
     'form.male': 'Male',
     'form.female': 'Female',
@@ -137,18 +137,18 @@ const translations = {
     'form.select_degree': 'Select degree',
     'form.enter_grade': 'Enter grade',
 
-    
+
     // Tooltips
     'tooltip.download': 'Download Certificate',
     'tooltip.view': 'View Details',
     'tooltip.edit': 'Edit Entity',
     'tooltip.delete': 'Delete Entity',
-    
+
     // Pagination
     'pagination.previous': 'Previous',
     'pagination.next': 'Next',
     'pagination.showing': 'Showing {start} to {end} of {total} entries',
-    
+
     // Confirmation
     'confirm.title': 'Confirm Action',
     'confirm.delete_title': 'Delete Entity',
@@ -163,10 +163,10 @@ const translations = {
     'confirm.request_submitted_successfully': 'Request for claim submitted successfully!',
     'confirm.delete_claim_request': 'Delete Claim Request?',
     'confirm.delete_claim_warning': 'Are you sure you want to delete this claim request? This action cannot be undone.',
-    
+
     // Page titles and headings
     'heading.add_teacher': 'Add Teacher Details',
-    'heading.add_student': 'Add Student Details', 
+    'heading.add_student': 'Add Employee Details',
     'heading.edit_teacher': 'Edit Teacher Details',
     'heading.edit_student': 'Edit Student Details',
     'heading.view_teacher': 'View Teacher Details',
@@ -175,7 +175,7 @@ const translations = {
     'heading.contact_info': 'Contact Information',
     'heading.academic_info': 'Academic Information',
     'heading.profile_settings': 'Profile Settings',
-    
+
     // Common actions
     'action.back': 'Back',
     'action.loading': 'Loading...',
@@ -188,7 +188,7 @@ const translations = {
     'action.delete': 'Delete',
     'action.clear_filters': 'Clear Filters',
     'action.approving': 'Approving...',
-    
+
     // Toast messages
     'toast.login_success': 'Login successful',
     'toast.welcome_back': 'Welcome back!',
@@ -239,7 +239,7 @@ const translations = {
     'toast.download_failed': 'Download failed',
     'toast.could_not_download': 'Could not download the certificate',
     'toast.could_not_fetch_claims': 'Could not fetch claims',
-    
+
     // Form validation
     'validation.required': 'This field is required',
     'validation.name_required': 'Name is required',
@@ -252,7 +252,7 @@ const translations = {
     'validation.subject_required': 'Subject is required',
     'validation.username_required': 'Username is required',
     'validation.password_required': 'Password is required',
-    
+
     // No data messages
     'no_data.claims': 'No claims found. Click "Request For Claim" to submit a new request.',
     'no_data.entities': 'No entities found.',
@@ -262,18 +262,18 @@ const translations = {
     'no_data.no_match_criteria': 'No entities match your search criteria',
     'no_data.no_entities_available': 'No entities available in the system',
     'no_data.no_claims_found': 'No claims found. Click "Request For Claim" to submit a new request.',
-    
+
     // Error messages
     'error.entity_not_found': 'Entity not found',
     'error.failed_load_data': 'Failed to load data',
-    
+
     // Loading messages
     'loading.claims': 'Loading claims...',
     'loading.data': 'Loading...',
-    
+
     // Placeholders
     'placeholder.search_teachers': 'Search teachers...',
-    'placeholder.search_students': 'Search students...',
+    'placeholder.search_students': 'Search employees...',
   },
   es: {
     // Navigation
@@ -284,7 +284,7 @@ const translations = {
     'nav.approved_claims': 'Reclamos Aprobados',
     'nav.logout': 'Cerrar Sesión',
     'nav.certificates': 'Certificados',
-    
+
     // Page titles
     'title.claim_requests': 'Solicitudes de Reclamos',
     'title.pending_claims': 'Reclamos Pendientes',
@@ -292,7 +292,7 @@ const translations = {
     'title.student_management': 'Gestión de Estudiantes',
     'title.teacher_management': 'Gestión de Profesores',
     'title.registry': 'Registro',
-    
+
     // Buttons
     'btn.request_claim': 'Solicitar Reclamo',
     'btn.approve': 'Aprobar',
@@ -313,14 +313,14 @@ const translations = {
     'btn.save_changes': 'Guardar Cambios',
     'btn.confirm_request': 'Confirmar Solicitud',
     'btn.back_to_registry': 'Volver al Registro',
-    
+
     // Status
     'status.approved': 'Aprobado',
     'status.pending': 'Pendiente',
     'status.rejected': 'Rechazado',
     'status.open': 'Abierto',
     'status.closed': 'Cerrado',
-    
+
     // Table headers
     'table.student_name': 'Nombre del estudiante',
     'table.institute_name': 'Nombre del instituto',
@@ -337,14 +337,14 @@ const translations = {
     'table.claim_id': 'ID del reclamo',
     'table.status': 'Estado',
     'table.actions': 'Acciones',
-    
+
     // Messages
     'msg.no_claims': 'No se encontraron reclamos. Haz clic en "Solicitar Reclamo" para enviar una nueva solicitud.',
     'msg.no_entities': 'No se encontraron entidades.',
     'msg.logged_out': 'Has cerrado sesión exitosamente.',
     'msg.approving': 'Aprobando...',
     'msg.rejecting': 'Rechazando...',
-    
+
     // Login
     'login.title': 'Bienvenido de Nuevo',
     'login.subtitle': 'Ingresa tus credenciales para acceder a tu cuenta',
@@ -356,24 +356,24 @@ const translations = {
     'login.admin': 'Administrador',
     'login.teacher': 'Profesor',
     'login.student': 'Estudiante',
-    
+
     // Profile
     'profile.view_profile': 'Ver Perfil',
     'profile.my_profile': 'Mi Perfil',
     'profile.username': 'Nombre de Usuario',
     'profile.email': 'Dirección de Correo',
     'profile.role': 'Rol',
-    
+
     // Languages
     'lang.english': 'Inglés',
     'lang.spanish': 'Español',
-    
+
     // Search
     'search.teachers': 'Buscar profesores...',
     'search.students': 'Buscar estudiantes...',
     'search.claims': 'Buscar reclamos...',
     'search.default': 'Buscar...',
-    
+
     // Forms
     'form.name': 'Nombre',
     'form.full_name': 'Nombre completo',
@@ -395,18 +395,18 @@ const translations = {
     'form.enter_institute': 'Ingresa el nombre del instituto',
     'form.select_gender': 'Selecciona el género',
     'form.select_subject': 'Selecciona la materia',
-    
+
     // Tooltips
     'tooltip.download': 'Descargar Certificado',
     'tooltip.view': 'Ver Detalles',
     'tooltip.edit': 'Editar Entidad',
     'tooltip.delete': 'Eliminar Entidad',
-    
+
     // Pagination
     'pagination.previous': 'Anterior',
     'pagination.next': 'Siguiente',
     'pagination.showing': 'Mostrando {start} a {end} de {total} entradas',
-    
+
     // Confirmation
     'confirm.title': 'Confirmar Acción',
     'confirm.delete_title': 'Eliminar Entidad',
@@ -421,7 +421,7 @@ const translations = {
     'confirm.request_submitted_successfully': '¡Solicitud de reclamo enviada exitosamente!',
     'confirm.delete_claim_request': '¿Eliminar Solicitud de Reclamo?',
     'confirm.delete_claim_warning': '¿Estás seguro de que quieres eliminar esta solicitud de reclamo? Esta acción no se puede deshacer.',
-    
+
     // Page titles and headings
     'heading.add_teacher': 'Agregar Detalles del Profesor',
     'heading.add_student': 'Agregar Detalles del Estudiante',
@@ -433,7 +433,7 @@ const translations = {
     'heading.contact_info': 'Información de Contacto',
     'heading.academic_info': 'Información Académica',
     'heading.profile_settings': 'Configuración del Perfil',
-    
+
     // Common actions
     'action.back': 'Atrás',
     'action.loading': 'Cargando...',
@@ -446,7 +446,7 @@ const translations = {
     'action.delete': 'Eliminar',
     'action.clear_filters': 'Limpiar Filtros',
     'action.approving': 'Aprobando...',
-    
+
     // Toast messages
     'toast.login_success': 'Inicio de sesión exitoso',
     'toast.welcome_back': '¡Bienvenido de nuevo!',
@@ -494,7 +494,7 @@ const translations = {
     'toast.download_failed': 'Falló la descarga',
     'toast.could_not_download': 'No se pudo descargar el certificado',
     'toast.could_not_fetch_claims': 'No se pudieron obtener reclamos',
-    
+
     // Form validation
     'validation.required': 'Este campo es requerido',
     'validation.name_required': 'El nombre es requerido',
@@ -507,7 +507,7 @@ const translations = {
     'validation.subject_required': 'La materia es requerida',
     'validation.username_required': 'El nombre de usuario es requerido',
     'validation.password_required': 'La contraseña es requerida',
-    
+
     // No data messages
     'no_data.claims': 'No se encontraron reclamos. Haz clic en "Solicitar Reclamo" para enviar una nueva solicitud.',
     'no_data.entities': 'No se encontraron entidades.',
@@ -517,15 +517,15 @@ const translations = {
     'no_data.no_match_criteria': 'Ninguna entidad coincide con tus criterios de búsqueda',
     'no_data.no_entities_available': 'No hay entidades disponibles en el sistema',
     'no_data.no_claims_found': 'No se encontraron reclamos. Haz clic en "Solicitar Reclamo" para enviar una nueva solicitud.',
-    
+
     // Error messages
     'error.entity_not_found': 'Entidad no encontrada',
     'error.failed_load_data': 'Falló al cargar datos',
-    
+
     // Loading messages
     'loading.claims': 'Cargando reclamos...',
     'loading.data': 'Cargando...',
-    
+
     // Placeholders
     'placeholder.search_teachers': 'Buscar profesores...',
     'placeholder.search_students': 'Buscar estudiantes...',

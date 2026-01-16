@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { addStudent, addTeacher } from "@/lib/api";
+import { addEmployee } from "@/lib/employeeApi";
 import { Badge } from "@/components/ui/badge";
 
 const FormField = ({ children }: { children: React.ReactNode }) => (
@@ -26,7 +27,7 @@ const AddEntity = () => {
   const { t } = useLanguage();
   const [userRole, setUserRole] = useState<string>("admin");
   const [isSaving, setIsSaving] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     gender: "Male",
     fullName: "",
@@ -52,14 +53,14 @@ const AddEntity = () => {
     if (fieldName === "mobile" && !value) return t("validation.mobile_required");
     if (fieldName === "email" && !value) return t("validation.email_required");
     if (fieldName === "instituteName" && !value) return t("validation.institute_required");
-    if (fieldName === "name" && !value && userRole === "admin") return t("validation.name_required");
-    if (fieldName === "fullName" && !value && userRole === "teacher") return t("validation.full_name_required");
+    // if (fieldName === "name" && !value && userRole === "admin") return t("validation.name_required");
+    if (fieldName === "fullName" && !value) return t("validation.full_name_required");
     return "";
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.dob) newErrors.dob = t("validation.dob_required");
     if (!formData.gender) newErrors.gender = t("validation.gender_required");
     if (!formData.mobile) newErrors.mobile = t("validation.mobile_required");
@@ -67,8 +68,8 @@ const AddEntity = () => {
     if (!formData.instituteName) newErrors.instituteName = t("validation.institute_required");
 
     if (userRole === "admin") {
-      // Adding teacher
-      if (!formData.name) newErrors.name = t("validation.name_required");
+      // Adding Employee (Admin role usually adds Employees in this context based on current requirements)
+      if (!formData.fullName) newErrors.fullName = t("validation.full_name_required");
     } else {
       // Adding student
       if (!formData.fullName) newErrors.fullName = t("validation.full_name_required");
@@ -80,23 +81,40 @@ const AddEntity = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (validateForm()) {
       setIsSaving(true);
       try {
         if (userRole === "admin") {
-          // Add Teacher
-          await addTeacher({
-            name: formData.name,
-            mobile: formData.mobile,
-            email: formData.email,
-            subject: formData.subject || "",
-            instituteName: formData.instituteName,
-            gender: formData.gender,
+          // Add Employee (Nested Schema)
+          await addEmployee({
+            identityDetails: {
+              fullName: formData.fullName,
+              employeeNumber: formData.instituteName, // Using Institute Name input as Employee ID
+              personId: 1 // Default dummy
+            },
+            contactDetails: {
+              email: formData.email,
+              mobile: formData.mobile
+            },
+            systemDetails: {
+              role: "employee",
+              backendPassword: "password123" // Default password
+            },
+            employmentDetails: {
+              admissionDate: formData.dob,
+              companyId: 1,
+              departmentId: 1,
+              positionId: 1,
+              employeeTypeId: 1,
+              salary: 50000,
+              status: true
+            }
           });
+
           toast({
-            title: "✅ " + t("toast.teacher_added"),
-            description: t("toast.teacher_added_desc"),
+            title: "✅ Employee Added",
+            description: "New employee record created successfully.",
             variant: "success",
           });
         } else {
@@ -134,8 +152,8 @@ const AddEntity = () => {
     navigate("/registry");
   };
 
-  const pageTitle = userRole === "admin" ? t("heading.add_teacher") : t("heading.add_student");
-  const isTeacher = userRole === "admin";
+  const pageTitle = userRole === "admin" ? "Add Employee" : t("heading.add_student");
+  const isTeacher = false; // userRole === "admin"; // Disabling Teacher specific logic to reuse for Employee
 
   return (
     <DashboardLayout>
@@ -148,7 +166,7 @@ const AddEntity = () => {
           <div className="h-6 w-px bg-border"></div>
           <h1 className="text-2xl font-bold text-foreground">{pageTitle}</h1>
         </div>
-        
+
         <form onSubmit={handleSubmit} className="space-y-6">
           <Card className="bg-card shadow-lg border-border rounded-xl overflow-hidden">
             <CardContent className="pt-8 px-8 pb-8 space-y-6">
@@ -235,28 +253,42 @@ const AddEntity = () => {
                 </FormField>
                 <FormField>
                   <Label htmlFor="instituteName" className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    {t("form.institute_name")} <span className="text-destructive">*</span>
-                    <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>
+                    {userRole === "admin" ? "Employee ID" : t("form.institute_name")} <span className="text-destructive">*</span>
+                    {userRole !== "admin" && <Badge variant="secondary" className="text-xs gap-1"><Shield className="h-3 w-3" />Attestable</Badge>}
                   </Label>
-                  <Select
-                    value={formData.instituteName}
-                    onValueChange={(value) => {
-                      setFormData({ ...formData, instituteName: value });
-                      const error = validateField("instituteName", value);
-                      setErrors(prev => ({ ...prev, instituteName: error || undefined }));
-                    }}
-                  >
-                    <SelectTrigger className={`rounded-lg h-11 ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}>
-                      <SelectValue placeholder={isTeacher ? t("form.select_institute") : t("form.select_institute")} />
-                    </SelectTrigger>
-                    <SelectContent className="bg-popover">
-                      <SelectItem value="IIT Delhi">IIT Delhi</SelectItem>
-                      <SelectItem value="IIT Bombay">IIT Bombay</SelectItem>
-                      <SelectItem value="NIT Trichy">NIT Trichy</SelectItem>
-                      <SelectItem value="Delhi University">Delhi University</SelectItem>
-                      <SelectItem value="Anna University">Anna University</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {userRole === "admin" ? (
+                    <Input
+                      id="instituteName"
+                      value={formData.instituteName}
+                      onChange={(e) => {
+                        setFormData({ ...formData, instituteName: e.target.value });
+                        const error = validateField("instituteName", e.target.value);
+                        setErrors(prev => ({ ...prev, instituteName: error || undefined }));
+                      }}
+                      className={`rounded-lg h-11 ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}
+                      placeholder="Enter Employee ID"
+                    />
+                  ) : (
+                    <Select
+                      value={formData.instituteName}
+                      onValueChange={(value) => {
+                        setFormData({ ...formData, instituteName: value });
+                        const error = validateField("instituteName", value);
+                        setErrors(prev => ({ ...prev, instituteName: error || undefined }));
+                      }}
+                    >
+                      <SelectTrigger className={`rounded-lg h-11 ${errors.instituteName ? "border-destructive ring-2 ring-destructive/20" : ""}`}>
+                        <SelectValue placeholder={t("form.select_institute")} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover">
+                        <SelectItem value="IIT Delhi">IIT Delhi</SelectItem>
+                        <SelectItem value="IIT Bombay">IIT Bombay</SelectItem>
+                        <SelectItem value="NIT Trichy">NIT Trichy</SelectItem>
+                        <SelectItem value="Delhi University">Delhi University</SelectItem>
+                        <SelectItem value="Anna University">Anna University</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   {errors.instituteName && <p className="text-sm font-medium text-destructive">{errors.instituteName}</p>}
                 </FormField>
               </div>
@@ -300,8 +332,8 @@ const AddEntity = () => {
                 </FormField>
               </div>
 
-              {/* Degree and Grade fields - only for students (Optional) */}
-              {!isTeacher && (
+              {/* Degree and Grade fields - only for students (NOT for admin/employee) */}
+              {userRole !== "admin" && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField>
                     <Label htmlFor="degree" className="text-sm font-semibold text-foreground flex items-center gap-2">
@@ -345,23 +377,8 @@ const AddEntity = () => {
                 </div>
               )}
 
-              {/* Subject field - only for teachers (admin adding teacher) */}
-              {isTeacher && (
-                <FormField>
-                  <Label htmlFor="subject" className="text-sm font-semibold text-foreground">
-                    {t("form.subject")}
-                  </Label>
-                  <Input
-                    id="subject"
-                    value={formData.subject}
-                    onChange={(e) => {
-                      setFormData({ ...formData, subject: e.target.value });
-                    }}
-                    className="rounded-lg h-11"
-                    placeholder={t("form.select_subject")}
-                  />
-                </FormField>
-              )}
+              {/* Subject field - only for teachers (NOT used context currently since admin adds employee) */}
+              {/* {isTeacher && (...)} removed since we are doing Employee */}
             </CardContent>
           </Card>
 
@@ -378,7 +395,7 @@ const AddEntity = () => {
               ) : (
                 <>
                   <Save className="h-4 w-4" />
-                  {t("btn.save")} {isTeacher ? t("login.teacher") : t("login.student")}
+                  {userRole === "admin" ? "Add Employee" : t("btn.save") + " " + t("login.student")}
                 </>
               )}
             </Button>

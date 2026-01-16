@@ -90,14 +90,32 @@ const EditEntity = () => {
           if (employeeData.Employee) cleanEmployee = employeeData.Employee;
           else if (employeeData.result?.Employee) cleanEmployee = employeeData.result.Employee;
 
+          // Handle mixed schema (nested vs flat)
+          const nestedName = cleanEmployee.identityDetails?.fullName;
+          const flatName = cleanEmployee.firstName && cleanEmployee.lastName
+            ? `${cleanEmployee.firstName} ${cleanEmployee.lastName}`.trim()
+            : cleanEmployee.name;
+
+          const nestedMobile = cleanEmployee.contactDetails?.mobile;
+          const flatMobile = cleanEmployee.phoneNumber || cleanEmployee.mobile;
+
+          const nestedEmail = cleanEmployee.contactDetails?.email;
+          const flatEmail = cleanEmployee.email;
+
+          const nestedDob = cleanEmployee.employmentDetails?.admissionDate;
+          const flatDob = cleanEmployee.admissionDate;
+
+          const nestedEmpId = cleanEmployee.identityDetails?.employeeNumber;
+          const flatEmpId = cleanEmployee.employeeNumber || cleanEmployee.employeeId;
+
           setFormData({
             gender: "Male", // Not in schema, default
-            fullName: cleanEmployee.identityDetails?.fullName || "",
+            fullName: nestedName || flatName || "",
             name: "",
-            mobile: cleanEmployee.contactDetails?.mobile || "",
-            email: cleanEmployee.contactDetails?.email || "",
-            instituteName: cleanEmployee.identityDetails?.employeeNumber ? `${cleanEmployee.identityDetails.employeeNumber}` : "",
-            dob: cleanEmployee.employmentDetails?.admissionDate || "",
+            mobile: nestedMobile || flatMobile || "",
+            email: nestedEmail || flatEmail || "",
+            instituteName: (nestedEmpId || flatEmpId) ? `${nestedEmpId || flatEmpId}` : "",
+            dob: nestedDob || flatDob || "",
             subject: "",
             degree: "",
             grade: "",
@@ -236,7 +254,7 @@ const EditEntity = () => {
     );
   }
 
-  const pageTitle = userRole === "admin" ? t("heading.edit_teacher") : t("heading.edit_student");
+  const pageTitle = userRole === "admin" ? t("Edit Employee Details") : t("heading.edit_student");
   const isTeacher = userRole === "admin";
 
   return (
