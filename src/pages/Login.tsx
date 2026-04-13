@@ -1,310 +1,183 @@
 import { useState, useEffect } from "react";
 import { oryService } from '@/lib/ory';
-import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/card";
-import { Fingerprint, Loader2, Eye, EyeOff, BookOpen } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { lookupEmployeeRole } from '@/lib/roleService';
+
+// Login flow:
+//   1. Hydra sends login_challenge → check for existing Kratos session
+//      a. Session found  → accept Hydra challenge silently (no button shown)
+//      b. No session     → show landing page with "Login with IDP" button
+//   2. Button click → redirect to external IdP OAuth2
+//   3. External IdP authenticates → redirects to /callback (Callback.tsx)
+//   4. No challenge anywhere → show landing page, button starts fresh Hydra flow
+
+const HYDRA_ADMIN  = import.meta.env.VITE_ORY_HYDRA_ADMIN  || 'http://localhost:4445';
+const EXT_AUTH_URL = 'https://cuenta.digital.gob.do/oauth2/auth';
+const EXT_IDP_NAME = 'cuenta.digital.gob.do';
 
 const Login = () => {
-  const navigate = useNavigate();
-  const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const loginChallenge = searchParams.get('login_challenge');
+  const [checking, setChecking] = useState(true);
+  const [status, setStatus] = useState("Connecting...");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
-  const [showPassword, setShowPassword] = useState(false);
+  const acceptHydraChallenge = async (challenge: string, subjectId: string, traits: any) => {
+    const userEmail = traits?.email || subjectId;
 
-
-  const handlePasswordVisibilityToggle = () => {
-    setShowPassword(true);
-    setTimeout(() => {
-      setShowPassword(false);
-    }, 1000);
-  };
-
-  const validateField = (fieldName: "email" | "password", value: string) => {
-    if (fieldName === "email") {
-      if (!value) {
-        return "Username is required";
-      }
+    // Look up the real role from the registry API
+    const { role: userRole, osid } = await lookupEmployeeRole(userEmail);
+    if (osid) {
+      sessionStorage.setItem('employeeOsid', osid);
     }
 
-    if (fieldName === "password") {
-      if (!value) {
-        return "Password is required";
+    const res = await fetch(
+      `${HYDRA_ADMIN}/admin/oauth2/auth/requests/login/accept?login_challenge=${challenge}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: userEmail,
+          remember: true,
+          remember_for: 3600,
+          context: { email: userEmail, role: userRole, name: traits?.name },
+        }),
       }
-    }
+    );
 
-    return "";
-  };
-
-  const validateForm = () => {
-    const newErrors: { email?: string; password?: string } = {};
-
-    const emailError = validateField("email", email);
-    const passwordError = validateField("password", password);
-
-    if (emailError) newErrors.email = emailError;
-    if (passwordError) newErrors.password = passwordError;
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (validateForm()) {
-      setIsLoading(true);
-
-      try {
-        // Initialize Kratos login flow
-        const loginFlow = await oryService.initLoginFlow();
-
-        // Extract CSRF token from the flow
-        const csrfNode = loginFlow.ui.nodes.find((node: any) =>
-          node.attributes?.name === "csrf_token"
-        );
-        const csrfToken = (csrfNode?.attributes as any)?.value as string;
-
-        if (!csrfToken) {
-          throw new Error("CSRF token not found. Please refresh and try again.");
-        }
-
-        // Submit credentials
-        const session = await oryService.submitLogin(loginFlow.id, email, password, csrfToken);
-
-        // Detect role for demo/local setup (consider "admin" or "admin@...")
-        const isEmailAdmin = email.toLowerCase().startsWith('admin');
-        const userRole = isEmailAdmin ? 'admin' : 'employee';
-
-        // Save to localStorage as a fallback for Consent page
-        localStorage.setItem('userRole', userRole);
-        localStorage.setItem('userEmail', email);
-
-        // Accept Hydra Challenge
-        const acceptResponse = await fetch(
-          `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
-          {
-            method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              subject: session.session.identity.id,
-              remember: true,
-              remember_for: 3600,
-              context: {
-                email: email,
-                role: userRole,
-                name: session.session.identity.traits.name,
-              },
-            }),
-          }
-        );
-
-        if (!acceptResponse.ok) {
-          const errText = await acceptResponse.text();
-          throw new Error('Failed to accept login challenge: ' + errText);
-        }
-
-        const acceptData = await acceptResponse.json();
-
-        // Redirect
-        window.location.href = acceptData.redirect_to;
-      } catch (error: any) {
-        console.error('Login error:', error);
-        toast({
-          title: "❌ Login failed",
-          description: error?.response?.data?.ui?.messages?.[0]?.text || error.message || "Invalid credentials. Please try again.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-      }
+    if (res.ok) {
+      const { redirect_to } = await res.json();
+      sessionStorage.removeItem('login_challenge');
+      window.location.href = redirect_to;
+    } else {
+      throw new Error('Failed to accept login challenge: ' + await res.text());
     }
   };
 
-  // Handle the logic when the page has a login_challenge
+  const redirectToExternalIdP = () => {
+    const extState = 'ext_' + Math.random().toString(36).substring(2, 15)
+                            + Math.random().toString(36).substring(2, 15);
+    sessionStorage.setItem('external_oidc_state', extState);
+
+    const authUrl = new URL(EXT_AUTH_URL);
+    authUrl.searchParams.set('client_id',     import.meta.env.VITE_EXT_OIDC_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri',  import.meta.env.VITE_EXT_OIDC_REDIRECT_URI || 'http://localhost:3000/callback');
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('scope',         'openid offline_access email profile');
+    authUrl.searchParams.set('state',         extState);
+
+    window.location.href = authUrl.toString();
+  };
+
   useEffect(() => {
-    const checkSession = async () => {
-      if (!loginChallenge) {
-        // No challenge means user came directly to /login
-        // We need to redirect to Hydra to get a challenge
-        console.log('🔄 No login challenge, starting OAuth2 flow...');
-        const timer = setTimeout(async () => {
-          const { oauth2Service } = await import('../lib/oauth2');
-          oauth2Service.startAuthFlow();
-        }, 100);
-        return () => clearTimeout(timer);
-      } else {
-        // We have a challenge. Check if we already have a Kratos session
-        console.log('✅ Have login challenge:', loginChallenge);
+    const init = async () => {
+      const storedChallenge = sessionStorage.getItem('login_challenge');
 
-        // Skip auto-login if we just explicitly logged out
-        const justLoggedOut = localStorage.getItem("justLoggedOut");
-        if (justLoggedOut === "true") {
-          console.log('🛑 Skipping auto-login because user just logged out.');
-          localStorage.removeItem("justLoggedOut");
+      // Case 1: Hydra sent a fresh login_challenge
+      if (loginChallenge) {
+        sessionStorage.setItem('login_challenge', loginChallenge);
+
+        // Re-use an existing Kratos session so the user is not asked to log in again
+        const session = await oryService.getSession();
+        if (session) {
+          setStatus("Resuming session...");
+          const traits = session.identity.traits || {};
+          if (traits.email) sessionStorage.setItem('userEmail', traits.email);
+          const name = traits.name
+            ? (typeof traits.name === 'object'
+                ? `${traits.name.first || ''} ${traits.name.last || ''}`.trim()
+                : traits.name)
+            : traits.username || '';
+          if (name) sessionStorage.setItem('userName', name);
+          await acceptHydraChallenge(loginChallenge, session.identity.id, traits);
           return;
         }
 
+        // No active session — auto-redirect to external IdP (challenge already in hand)
+        redirectToExternalIdP();
+        return;
+      }
+
+      // Case 2: Returning to /login after an external-IdP round-trip that
+      // landed here instead of /callback (e.g. from a return_to URL).
+      if (storedChallenge) {
         try {
           const session = await oryService.getSession();
           if (session) {
-            console.log('🛡️ Active session found, auto-accepting Hydra challenge...');
-
-            // Extract info from session traits
-            const email = session.identity.traits.email || session.identity.traits.username || session.identity.id;
-            const isEmailAdmin = email.toLowerCase().startsWith('admin');
-            const userRole = isEmailAdmin ? 'admin' : 'employee';
-
-            // Accept Hydra Challenge automatically
-            const acceptResponse = await fetch(
-              `${import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445'}/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
-              {
-                method: 'PUT',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  subject: session.identity.id,
-                  remember: true,
-                  remember_for: 3600,
-                  context: {
-                    email: email,
-                    role: userRole,
-                    name: session.identity.traits.name || email,
-                  },
-                }),
-              }
-            );
-
-            if (acceptResponse.ok) {
-              const acceptData = await acceptResponse.json();
-              console.log('🚀 Redirecting to Hydra accept URL');
-              window.location.href = acceptData.redirect_to;
-              return;
-            }
+            setStatus("Completing login...");
+            const traits = session.identity.traits || {};
+            if (traits.email) sessionStorage.setItem('userEmail', traits.email);
+            const name = traits.name
+              ? (typeof traits.name === 'object'
+                  ? `${traits.name.first || ''} ${traits.name.last || ''}`.trim()
+                  : traits.name)
+              : traits.username || '';
+            if (name) sessionStorage.setItem('userName', name);
+            await acceptHydraChallenge(storedChallenge, session.identity.id, traits);
+            return;
           }
-        } catch (e) {
-          console.log('ℹ️ No active session or failed to fetch, proceeding to login form');
+        } catch (_) {
+          // no session — fall through
         }
+        sessionStorage.removeItem('login_challenge');
       }
+
+      // Case 3: No challenge anywhere — check for existing Kratos session first
+      try {
+        const session = await oryService.getSession();
+        if (session) {
+          // Session exists (e.g. another tab is logged in) — start Hydra flow silently
+          setStatus("Resuming session...");
+          const { oauth2Service } = await import('../lib/oauth2');
+          oauth2Service.startAuthFlow();
+          return;
+        }
+      } catch (_) {
+        // No session — fall through to show button
+      }
+      setChecking(false);
     };
 
-    checkSession();
+    init();
   }, [loginChallenge]);
 
-  // Show loading screen while redirecting to Hydra
-  if (!loginChallenge) {
+  const handleLogin = async () => {
+    const storedChallenge = sessionStorage.getItem('login_challenge');
+    if (storedChallenge) {
+      // Challenge exists — go to external IdP for authentication
+      redirectToExternalIdP();
+    } else {
+      // No challenge — start a fresh Hydra OAuth2 flow first
+      const { oauth2Service } = await import('../lib/oauth2');
+      oauth2Service.startAuthFlow();
+    }
+  };
+
+  if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="h-12 w-12 animate-spin text-cyan-500" />
-          <h2 className="text-xl font-semibold">Connecting to Secure Login...</h2>
+          <h2 className="text-xl font-semibold">{status}</h2>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-cyan-900 via-blue-900 to-slate-900">
-
-      <div className="grid lg:grid-cols-2 gap-8 w-full max-w-4xl">
-        {/* Info Side */}
-        <div className="hidden lg:flex flex-col justify-center text-white space-y-6 p-6">
-          <div className="space-y-4">
-            <h1 className="text-4xl font-bold tracking-tight">Welcome Back</h1>
-            {/* <p className="text-lg text-cyan-100">
-              Secure Authentication provided by Ory Kratos.
-            </p> */}
-          </div>
-
-          <div className="space-y-4 text-sm text-cyan-200/80">
-            <p>Please sign in to continue</p>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white">
+      <div className="flex flex-col items-center gap-8 p-10 bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <h1 className="text-2xl font-bold tracking-tight">Welcome</h1>
+          <p className="text-slate-400 text-sm">Sign in to access the registry</p>
         </div>
-
-        {/* Login Card */}
-        <Card className="w-full shadow-2xl border-0 bg-white/95 backdrop-blur-sm">
-          <CardContent className="pt-8 pb-8">
-            <div className="flex flex-col items-center mb-8">
-              <div className="w-16 h-16 rounded-full bg-cyan-100 flex items-center justify-center mb-4">
-                <Fingerprint className="h-8 w-8 text-cyan-600" />
-              </div>
-              <h1 className="text-2xl font-bold text-slate-900">Sign In</h1>
-              <p className="text-sm text-slate-500 mt-1">Use your Ory ID to continue</p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email / Username</Label>
-                <Input
-                  id="email"
-                  type="text"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    const error = validateField("email", e.target.value);
-                    setErrors(prev => ({ ...prev, email: error || undefined }));
-                  }}
-                  className={errors.email ? 'border-red-500' : 'focus-visible:ring-cyan-500'}
-                  placeholder="admin"
-                />
-                {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    value={password}
-                    onChange={(e) => {
-                      setPassword(e.target.value);
-                      const error = validateField("password", e.target.value);
-                      setErrors(prev => ({ ...prev, password: error || undefined }));
-                    }}
-                    className={errors.password ? 'border-red-500' : 'focus-visible:ring-cyan-500'}
-                    placeholder="••••••••"
-                  />
-                  <button
-                    type="button"
-                    onClick={handlePasswordVisibilityToggle}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cyan-600"
-                  >
-                    {showPassword ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                  </button>
-                </div>
-                {errors.password && <p className="text-xs text-red-500">{errors.password}</p>}
-              </div>
-
-              <div className="pt-2">
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white font-bold py-6 shadow-lg transform transition active:scale-[0.98]"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing in...
-                    </>
-                  ) : (
-                    "Sign In"
-                  )}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+        <Button
+          onClick={handleLogin}
+          className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 rounded-lg transition-colors"
+        >
+          Login with {EXT_IDP_NAME}
+        </Button>
       </div>
     </div>
   );

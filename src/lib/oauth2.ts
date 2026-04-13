@@ -16,8 +16,8 @@ export const oauth2Service = {
   // Start OAuth2 flow
   startAuthFlow() {
     const clientId = import.meta.env.VITE_OAUTH2_CLIENT_ID;
-    const redirectUri = import.meta.env.VITE_OAUTH2_REDIRECT_URI || 'http://localhost:5173/callback';
-    const scope = 'openid offline email profile';
+    const redirectUri = import.meta.env.VITE_OAUTH2_REDIRECT_URI || 'http://localhost:3000/callback';
+    const scope = 'openid offline_access email profile';
 
     if (!clientId) {
       throw new Error('OAuth2 client ID not configured');
@@ -34,10 +34,8 @@ export const oauth2Service = {
     authUrl.searchParams.append('response_type', 'code');
     authUrl.searchParams.append('scope', scope);
     authUrl.searchParams.append('state', state);
+    authUrl.searchParams.append('prompt', 'login');  // Force fresh login, never reuse Hydra remembered session
 
-    console.log('Starting OAuth2 flow, redirecting to:', authUrl.toString());
-
-    // Redirect to Hydra
     window.location.href = authUrl.toString();
   },
 
@@ -45,9 +43,7 @@ export const oauth2Service = {
   async exchangeCodeForToken(code: string): Promise<{ access_token: string, refresh_token: string, id_token?: string }> {
     const clientId = import.meta.env.VITE_OAUTH2_CLIENT_ID;
     const clientSecret = import.meta.env.VITE_OAUTH2_CLIENT_SECRET;
-    const redirectUri = import.meta.env.VITE_OAUTH2_REDIRECT_URI || 'http://localhost:5173/callback';
-
-    console.log('Exchanging code for token...', { code, clientId });
+    const redirectUri = import.meta.env.VITE_OAUTH2_REDIRECT_URI || 'http://localhost:3000/callback';
 
     const response = await fetch(`${stripTrailingSlash(import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444')}/oauth2/token`, {
       method: 'POST',
@@ -69,9 +65,7 @@ export const oauth2Service = {
       throw new Error(`Token exchange failed: ${errorText}`);
     }
 
-    const tokens = await response.json();
-    console.log('Token exchange successful!');
-    return tokens;
+    return await response.json();
   },
 
   // Refresh access token

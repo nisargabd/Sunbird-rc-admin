@@ -1,61 +1,39 @@
-import { Database, LogOut, ClipboardList, CheckCircle, User, Clock } from "lucide-react";
+import { Database, LogOut, CheckCircle, User, Clock } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
-import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { oryService } from "@/lib/ory";
 
 export const Sidebar = () => {
-  const navigate = useNavigate();
   const { toast } = useToast();
   const [userRole, setUserRole] = useState<string>("");
   const { t } = useLanguage();
 
   useEffect(() => {
-    const role = localStorage.getItem("userRole") || "admin";
+    const role = sessionStorage.getItem("userRole") || "admin";
     setUserRole(role);
   }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = () => {
     toast({
-      title: "👋 Logging out...",
-      description: "Securing your session...",
+      title: "Logging out...",
+      description: "Ending your session...",
     });
 
-    console.log("👋 Initiating chained logout...");
+    // Read id_token before clearing storage (needed for Hydra OIDC logout)
+    const idToken = sessionStorage.getItem('id_token');
 
-    // 1. Get tokens for Hydra hint
-    const idToken = sessionStorage.getItem("id_token");
-
-    // Clear all local state immediately
     localStorage.clear();
     sessionStorage.clear();
 
-    // Prevent auto-login loop
-    localStorage.setItem("justLoggedOut", "true");
+    const postLogoutUri = encodeURIComponent(window.location.origin + '/login');
+    const hydraPublic = import.meta.env.VITE_ORY_HYDRA_PUBLIC || 'http://localhost:4444';
 
-    try {
-      // 2. Construct Hydra Logout URL
-      // Logic: Kratos Logout -> Redirect to Hydra Logout -> Redirect to Login Page
-      const hydraPublicUrl = import.meta.env.VITE_ORY_HYDRA_PUBLIC || "http://localhost:4444";
-      const postLogoutRedirectUri = window.location.origin + "/login";
-
-      const hydraLogoutUrl = new URL(`${hydraPublicUrl}/oauth2/sessions/logout`);
-      if (idToken) {
-        hydraLogoutUrl.searchParams.append("id_token_hint", idToken);
-      }
-      hydraLogoutUrl.searchParams.append("post_logout_redirect_uri", postLogoutRedirectUri);
-
-      console.log("🔗 Chain Target: ", hydraLogoutUrl.toString());
-
-      // 3. Trigger Kratos Logout with return_to = Hydra Logout URL
-      // import { oryService } from '@/lib/ory'; // Ensure imported if not already
-      await oryService.logout(hydraLogoutUrl.toString());
-
-    } catch (e) {
-      console.error("Logout chain failed", e);
-      window.location.href = "/login";
+    if (idToken) {
+      // Proper OIDC logout — invalidates Hydra session and all tokens
+      window.location.href = `${hydraPublic}/oauth2/sessions/logout?id_token_hint=${idToken}&post_logout_redirect_uri=${postLogoutUri}`;
+    } else {
+      window.location.href = '/login';
     }
   };
 
@@ -75,59 +53,25 @@ export const Sidebar = () => {
       </div>
 
       <nav className="flex-1 py-4 px-3 overflow-y-auto space-y-2">
-        {userRole === "student" ? (
-          <>
-            <NavLink
-              to="/profile"
-              className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
-              activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
-            >
-              <User className="h-5 w-5 text-info/80 group-hover:text-info transition-colors" />
-              <span>{t("profile.my_profile")}</span>
-            </NavLink>
-          </>
-
-        ) : userRole === "teacher" ? (
-          <>
-            <NavLink
-              to="/registry"
-              className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
-              activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
-            >
-              <Database className="h-5 w-5 text-primary/80 group-hover:text-primary transition-colors" />
-              <span>{t("nav.students_list")}</span>
-            </NavLink>
-            <NavLink
-              to="/pending-claims"
-              className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
-              activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
-            >
-              <Clock className="h-5 w-5 text-warning/80 group-hover:text-warning transition-colors" />
-              <span>{t("nav.pending_claims")}</span>
-            </NavLink>
-            <NavLink
-              to="/approved-claims"
-              className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
-              activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
-            >
-              <CheckCircle className="h-5 w-5 text-success/80 group-hover:text-success transition-colors" />
-              <span>{t("nav.approved_claims")}</span>
-            </NavLink>
-          </>
-        ) : userRole === "admin" ? (
+        {userRole === "admin" ? (
           <NavLink
             to="/registry"
             className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
             activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
           >
             <Database className="h-5 w-5 text-primary/80 group-hover:text-primary transition-colors" />
-            <span>{t("Employee List")}</span>
+            <span>Employee List</span>
           </NavLink>
         ) : (
-          // Standard Employee View (No List Access)
-          <div className="px-4 py-2 text-sm text-muted-foreground italic text-center border border-dashed rounded-lg bg-muted/20">
-            {t("Welcome, Employee")}
-          </div>
+          // Employee View - Profile Only
+          <NavLink
+            to="/profile"
+            className="relative flex items-center gap-3 px-3.5 py-3 rounded-lg text-foreground/75 font-medium border border-transparent hover:border-primary/30 hover:bg-primary/10 hover:text-primary transition-all duration-200 group"
+            activeClassName="bg-primary/15 text-primary font-semibold border border-primary/40 shadow-sm before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-6 before:w-1.5 before:rounded-full before:bg-primary"
+          >
+            <User className="h-5 w-5 text-info/80 group-hover:text-info transition-colors" />
+            <span>My Profile</span>
+          </NavLink>
         )}
       </nav>
 

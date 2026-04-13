@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { oauth2Service } from '../lib/oauth2';
+import { lookupEmployeeRole } from '../lib/roleService';
+
+const HYDRA_ADMIN = import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445';
+const EXT_CLIENT_ID = import.meta.env.VITE_EXT_OIDC_CLIENT_ID;
+const EXT_CLIENT_SECRET = import.meta.env.VITE_EXT_OIDC_CLIENT_SECRET;
+const EXT_REDIRECT_URI = import.meta.env.VITE_EXT_OIDC_REDIRECT_URI || 'http://localhost:3000/callback';
 
 export default function Callback() {
   const [searchParams] = useSearchParams();
@@ -13,17 +19,10 @@ export default function Callback() {
       const state = searchParams.get('state');
       const error = searchParams.get('error');
       const errorDescription = searchParams.get('error_description');
-      const savedState = sessionStorage.getItem('oauth2_state');
 
       // Check for OAuth2 errors first
       if (error) {
         setError(`OAuth2 Error: ${error} - ${errorDescription || 'Unknown error'}`);
-        return;
-      }
-
-      // Validate state (CSRF protection)
-      if (state !== savedState) {
-        setError('Invalid state parameter - possible CSRF attack');
         return;
       }
 
@@ -32,17 +31,142 @@ export default function Callback() {
         return;
       }
 
+      // ---- External OIDC flow (state starts with "ext_") ----
+      if (state?.startsWith('ext_')) {
+        const savedExtState = sessionStorage.getItem('external_oidc_state');
+        if (state !== savedExtState) {
+          setError('Invalid state parameter - possible CSRF attack');
+          return;
+        }
+
+        try {
+          sessionStorage.removeItem('external_oidc_state');
+
+          // Exchange code with external IdP via dev proxy (/ext-oidc/ → cuenta.digital.gob.do/oauth2/)
+          const tokenResponse = await fetch('/ext-oidc/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              code,
+              redirect_uri: EXT_REDIRECT_URI,
+              client_id: EXT_CLIENT_ID,
+              client_secret: EXT_CLIENT_SECRET,
+            }),
+          });
+
+          if (!tokenResponse.ok) {
+            throw new Error(`External token exchange failed: ${await tokenResponse.text()}`);
+          }
+
+          const extTokens = await tokenResponse.json();
+
+          // Decode external id_token (always has sub; may have email/name if 'email profile' scope granted)
+          let extIdClaims: any = {};
+          if (extTokens.id_token) {
+            try {
+              const parts = extTokens.id_token.split('.');
+              const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+              extIdClaims = JSON.parse(decodeURIComponent(atob(b64).split('').map(c =>
+                '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+              ).join('')));
+            } catch (e) {
+              // Could not decode external id_token
+            }
+          }
+
+          // Get user info from external IdP
+          const userInfoResponse = await fetch('/ext-oidc/userinfo', {
+            headers: { Authorization: `Bearer ${extTokens.access_token}` },
+          });
+
+          let userInfo: any = {};
+          if (userInfoResponse.ok) {
+            userInfo = await userInfoResponse.json();
+          }
+
+          // Try all possible field names different IdPs use for email and subject
+          let userEmail = userInfo.email || extIdClaims.email
+            || userInfo.preferred_username || extIdClaims.preferred_username
+            || userInfo.login || userInfo.username || userInfo.uid
+            || extIdClaims.sub || userInfo.sub
+            || 'unknown';
+          // Normalize: if the IdP returned a pure numeric personal ID (no @),
+          // append @rc.local so it matches the RC registry record.
+          if (/^\d+$/.test(userEmail)) {
+            userEmail = `${userEmail}@rc.local`;
+          }
+          const userName = userInfo.name || extIdClaims.name
+            || [userInfo.given_name, userInfo.family_name].filter(Boolean).join(' ')
+            || [extIdClaims.given_name, extIdClaims.family_name].filter(Boolean).join(' ')
+            || '';
+
+          // Look up employee role and osid from Registry API
+          const { role: userRole, osid: employeeOsid } = await lookupEmployeeRole(userEmail);
+          if (employeeOsid) {
+            sessionStorage.setItem('employeeOsid', employeeOsid);
+          }
+
+          const loginChallenge = sessionStorage.getItem('login_challenge');
+          if (!loginChallenge) {
+            throw new Error('Login challenge not found. Please restart the login flow.');
+          }
+
+          // Accept Hydra login challenge with the external user's identity
+          const acceptRes = await fetch(
+            `${HYDRA_ADMIN}/admin/oauth2/auth/requests/login/accept?login_challenge=${loginChallenge}`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                subject: userEmail,  // Must match contactDetails.email for registry ownership
+                remember: true,
+                remember_for: 3600,
+                context: { email: userEmail, role: userRole, name: userName },
+              }),
+            }
+          );
+
+          if (!acceptRes.ok) {
+            throw new Error(`Failed to accept Hydra login: ${await acceptRes.text()}`);
+          }
+
+          const { redirect_to } = await acceptRes.json();
+          sessionStorage.removeItem('login_challenge');
+
+          sessionStorage.setItem('userEmail', userEmail);
+          sessionStorage.setItem('userRole', userRole);
+          if (userName) sessionStorage.setItem('userName', userName);
+
+          // Follow Hydra's redirect (goes to consent, then back here with a Hydra code)
+          window.location.href = redirect_to;
+        } catch (err: any) {
+          console.error('External OIDC callback error:', err);
+          setError(err.message || 'External login failed');
+        }
+        return;
+      }
+
+      // ---- Internal Hydra OAuth2 flow ----
+      const savedState = sessionStorage.getItem('oauth2_state');
+      if (state !== savedState) {
+        setError('Invalid state parameter - possible CSRF attack');
+        return;
+      }
+
       try {
         // Exchange code for tokens
         const tokens = await oauth2Service.exchangeCodeForToken(code);
 
-        // Store tokens
-        localStorage.setItem('accessToken', tokens.access_token);
-        localStorage.setItem('refreshToken', tokens.refresh_token);
-        localStorage.setItem('isLoggedIn', 'true');
+        // Clear any stale tokens before storing new ones
+        sessionStorage.removeItem('accessToken');
+        sessionStorage.removeItem('refreshToken');
+        sessionStorage.removeItem('id_token');
 
-        // Also store in sessionStorage for Demo Inspection
-        sessionStorage.setItem('access_token', tokens.access_token);
+        // Store tokens
+        sessionStorage.setItem('accessToken', tokens.access_token);
+        sessionStorage.setItem('refreshToken', tokens.refresh_token);
+        sessionStorage.setItem('isLoggedIn', 'true');
         if (tokens.id_token) {
           sessionStorage.setItem('id_token', tokens.id_token);
         }
@@ -50,57 +174,87 @@ export default function Callback() {
         // Clean up
         sessionStorage.removeItem('oauth2_state');
 
-        // Decode token to get role for routing
+        // Helper: decode a JWT payload
+        const decodeJwt = (token: string) => {
+          const parts = token.split('.');
+          if (parts.length !== 3) return null;
+          try {
+            const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const json = decodeURIComponent(atob(base64).split('').map(c =>
+              '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+            ).join(''));
+            return JSON.parse(json);
+          } catch { return null; }
+        };
+
+        const accessPayload = decodeJwt(tokens.access_token);
+        const idPayload = tokens.id_token ? decodeJwt(tokens.id_token) : null;
+
+        // Call Hydra userinfo endpoint for ground-truth claims
+        let userInfoClaims: any = {};
         try {
-          const tokenParts = tokens.access_token.split('.');
-          if (tokenParts.length === 3) {
-            // Robust base64url decoding
-            const base64Url = tokenParts[1];
-            const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-            const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
-              return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-            }).join(''));
-
-            const payload = JSON.parse(jsonPayload);
-            console.log('🔑 Token Payload:', payload);
-
-            // Try different paths for role and email
-            let role = payload.role || payload.ext?.role || payload.claims?.role || payload['https://sunbird.rc/role'];
-            const email = payload.email || payload.ext?.email || payload.claims?.email || payload.sub;
-
-            // Fallback: If email starts with admin, force admin role for demo
-            if (!role && email && email.toLowerCase().startsWith('admin')) {
-              role = 'admin';
-            }
-
-            role = (role || 'employee').toLowerCase();
-
-            console.log('🎭 Detected Role:', role);
-
-            // Store for later use
-            localStorage.setItem('userRole', role);
-            if (email) localStorage.setItem('userEmail', email);
-
-            // Navigate and show feedback
-            if (role === 'admin' || email?.toLowerCase().startsWith('admin')) {
-              console.log('🚀 Redirecting to Registry');
-              navigate('/registry');
-            } else if (role === 'teacher') {
-              navigate('/registry');
-            } else {
-              console.log('👤 Redirecting to Profile');
-              navigate('/profile');
-            }
-            return;
-          } else {
-            console.warn('⚠️ Access token is not a JWT');
+          const uiRes = await fetch('/ory/hydra/userinfo', {
+            headers: { Authorization: `Bearer ${tokens.access_token}` },
+          });
+          if (uiRes.ok) {
+            userInfoClaims = await uiRes.json();
           }
-        } catch (decodeError) {
-          console.error('❌ Could not decode token for role routing:', decodeError);
+        } catch (e) {
+          // UserInfo fetch failed
         }
 
-        // Default fallback
-        navigate('/registry');
+        // Merge: prefer non-"unknown" values; priority: userinfo > id_token > access_token > sessionStorage
+        const pick = (...vals: (string | undefined | null)[]) =>
+          vals.find(v => v && v !== 'unknown') ?? '';
+
+        const email = pick(
+          userInfoClaims.email,
+          idPayload?.email,
+          accessPayload?.email, accessPayload?.ext?.email,
+          sessionStorage.getItem('userEmail'),
+        );
+        const name = pick(
+          userInfoClaims.name,
+          idPayload?.name,
+          accessPayload?.name,
+          sessionStorage.getItem('userName'),
+        );
+        let role = pick(
+          userInfoClaims.role,
+          idPayload?.role,
+          accessPayload?.role, accessPayload?.ext?.role,
+          sessionStorage.getItem('userRole'),
+        );
+
+        console.log('[Callback] Initial role from JWT/sessionStorage:', role);
+
+        if (email) sessionStorage.setItem('userEmail', email);
+        if (name) sessionStorage.setItem('userName', name);
+
+        // Look up role and osid from Registry API (primary source of truth)
+        console.log('[Callback] Looking up role for email:', email);
+        const { role: rcRole, osid: rcOsid } = await lookupEmployeeRole(email);
+        console.log('[Callback] Registry lookup result:', { rcRole, rcOsid });
+        
+        if (rcOsid) {
+          sessionStorage.setItem('employeeOsid', rcOsid);
+        }
+
+        // Use registry role if found, otherwise fall back to JWT role
+        role = (rcRole || role || 'employee').toLowerCase();
+        sessionStorage.setItem('userRole', role);
+
+        console.log('[Callback] Final navigation decision:', { role, rcRole, email });
+        console.log('[Callback] SessionStorage userRole:', sessionStorage.getItem('userRole'));
+
+        if (role === 'admin') {
+          console.log('[Callback] Navigating to /registry (admin)');
+          navigate('/registry');
+        } else {
+          console.log('[Callback] Navigating to /profile (employee)');
+          navigate('/profile');
+        }
+        return;
       } catch (err) {
         console.error('Token exchange error:', err);
         setError('Failed to complete login');
@@ -124,7 +278,7 @@ export default function Callback() {
               You denied the access request. To continue, you must authorize the application.
             </p>
             <button
-              onClick={() => navigate('/teacher-home')}
+              onClick={() => navigate('/login')}
               className="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 text-white rounded-md transition-colors font-medium"
             >
               Return Home
