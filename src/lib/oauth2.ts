@@ -12,6 +12,28 @@ const hydraConfig = new Configuration({
 
 export const hydraOAuth2 = new OAuth2Api(hydraConfig);
 
+// Rewrites a Hydra-generated redirect_to URL (which uses Hydra's internal
+// urls.self.public, e.g. http://localhost:4444) to go through the Vite proxy
+// (VITE_ORY_HYDRA_PUBLIC, e.g. http://localhost:3000/ory/hydra).
+// This ensures the CSRF cookie — set on the proxy origin — is sent correctly.
+export const rewriteHydraRedirect = (redirectTo: string): string => {
+  const hydraPublic = import.meta.env.VITE_ORY_HYDRA_PUBLIC;
+  if (!hydraPublic) return redirectTo;
+  try {
+    const dest = new URL(redirectTo);
+    const proxy = new URL(hydraPublic);
+    // If they already share origin + base path, nothing to rewrite
+    if (dest.origin === proxy.origin) return redirectTo;
+    dest.protocol = proxy.protocol;
+    dest.host = proxy.host;
+    const proxyBase = proxy.pathname.replace(/\/$/, '');
+    if (proxyBase) dest.pathname = proxyBase + dest.pathname;
+    return dest.toString();
+  } catch {
+    return redirectTo;
+  }
+};
+
 export const oauth2Service = {
   // Start OAuth2 flow
   startAuthFlow() {

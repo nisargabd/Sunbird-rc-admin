@@ -70,6 +70,16 @@ export default defineConfig(({ mode }) => ({
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/credential/, ''),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            // The credential service expects 'templateid' in lowercase
+            const templateId = req.headers['templateid'];
+            if (templateId) {
+              // Forward as lowercase templateid (not camelCase)
+              proxyReq.setHeader('templateid', templateId as string);
+            }
+          });
+        },
       },
     },
   },

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { rewriteHydraRedirect } from '@/lib/oauth2';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -75,8 +76,8 @@ export default function Consent() {
 
             const acceptData = await acceptResponse.json();
 
-            // Redirect to callback with authorization code
-            window.location.href = acceptData.redirect_to;
+            // Redirect via proxy so CSRF cookie origin matches
+            window.location.href = rewriteHydraRedirect(acceptData.redirect_to);
         } catch (err: any) {
             console.error('Consent error:', err);
             setError(err.message || 'Failed to process consent');

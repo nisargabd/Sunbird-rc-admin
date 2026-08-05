@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { oauth2Service } from '../lib/oauth2';
+import { oauth2Service, rewriteHydraRedirect } from '../lib/oauth2';
 import { lookupEmployeeRole } from '../lib/roleService';
 
 const HYDRA_ADMIN = import.meta.env.VITE_ORY_HYDRA_ADMIN || 'http://localhost:4445';
@@ -138,8 +138,8 @@ export default function Callback() {
           sessionStorage.setItem('userRole', userRole);
           if (userName) sessionStorage.setItem('userName', userName);
 
-          // Follow Hydra's redirect (goes to consent, then back here with a Hydra code)
-          window.location.href = redirect_to;
+          // Follow Hydra's redirect via the proxy so CSRF cookie origin matches
+          window.location.href = rewriteHydraRedirect(redirect_to);
         } catch (err: any) {
           console.error('External OIDC callback error:', err);
           setError(err.message || 'External login failed');

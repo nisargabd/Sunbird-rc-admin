@@ -243,10 +243,13 @@ export const checkCertificateIssued = async (osid: string): Promise<{ issued: bo
         );
         if (tagsRes.ok) {
             const creds = await tagsRes.json();
-            if (Array.isArray(creds) && creds.length > 0 && creds[0]?.id) {
-                const subject = creds[0]?.credentialSubject;
-                if (subject?.name && subject?.position) {
-                    return { issued: true, credentialId: creds[0].id };
+            if (Array.isArray(creds) && creds.length > 0) {
+                const cred = creds[0];
+                const subject = cred?.credentialSubject;
+                // Verify it's a valid employee credential with required fields
+                if (subject?.name && subject?.position && cred?.id) {
+                    // Return the actual credential ID (not the subject ID)
+                    return { issued: true, credentialId: cred.id };
                 }
             }
         }
@@ -325,19 +328,25 @@ export const downloadEmployeeCertificate = async (osid: string): Promise<Blob> =
         throw new Error("No certificate has been issued for this employee yet. Please contact your administrator.");
     }
 
+    console.log('Downloading certificate:', { credentialId, templateId: TEMPLATE_ID });
+
     const pdfRes = await fetch(
         `${BASE_URL}/credential/credentials/${encodeURIComponent(credentialId)}`,
         {
             method: "GET",
             headers: {
                 "Accept": "application/pdf",
-                "templateId": TEMPLATE_ID,
+                "templateid": TEMPLATE_ID,  // lowercase to ensure it passes through proxy
                 "Authorization": `Bearer ${token}`,
             },
         }
     );
+    
+    console.log('PDF response status:', pdfRes.status);
+    
     if (!pdfRes.ok) {
         const err = await pdfRes.text();
+        console.error('PDF download failed:', err);
         throw new Error(`Failed to download certificate: ${pdfRes.status} ${err}`);
     }
     return await pdfRes.blob();

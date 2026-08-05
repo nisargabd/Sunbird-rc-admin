@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { oryService } from '@/lib/ory';
+import { rewriteHydraRedirect } from '@/lib/oauth2';
 import { useSearchParams } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +50,7 @@ const Login = () => {
     if (res.ok) {
       const { redirect_to } = await res.json();
       sessionStorage.removeItem('login_challenge');
-      window.location.href = redirect_to;
+      window.location.href = rewriteHydraRedirect(redirect_to);
     } else {
       throw new Error('Failed to accept login challenge: ' + await res.text());
     }
